@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pocket Coding · 前端设计（13 版本 × 7 页面）</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Inter+Tight:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root{
+    --page-bg:#060810; --page-fg:#e8ecf5; --page-sub:#8b93a7; --page-card:#11131d; --page-border:#232636;
+  }
+  html,body{ background:var(--page-bg); color:var(--page-fg); font-family:'Inter',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  a{ color:inherit; }
+  ::selection{ background:#22c55e44; }
+
+  /* ---------- Page shell ---------- */
+  .wrap{ max-width:1400px; margin:0 auto; padding:40px 24px 80px; }
+  .top h1{ font-size:30px; font-weight:700; letter-spacing:-.02em; }
+  .top .tag{ color:#22c55e; font-family:'JetBrains Mono',monospace; font-size:13px; margin-top:6px; }
+  .top p{ color:var(--page-sub); margin-top:14px; max-width:820px; line-height:1.7; font-size:14px; }
+  .top .tag2{ color:#E8B4D6; font-family:'JetBrains Mono',monospace; font-size:12px; margin-top:4px; }
+  .meta{ display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; }
+  .pill{ font-size:12px; color:var(--page-sub); border:1px solid var(--page-border); background:var(--page-card); padding:6px 11px; border-radius:999px; display:inline-flex; align-items:center; gap:7px; }
+  .pill b{ color:var(--page-fg); font-weight:600; }
+  .swatch{ width:11px; height:11px; border-radius:3px; display:inline-block; }
+
+  /* ---------- Version section ---------- */
+  .version{ margin-top:56px; }
+  .vhead{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; border-bottom:1px solid var(--page-border); padding-bottom:16px; }
+  .vhead .vname{ font-size:20px; font-weight:700; letter-spacing:-.01em; }
+  .vhead .vdesc{ color:var(--page-sub); font-size:13px; margin-top:5px; max-width:620px; line-height:1.6; }
+  .vswatches{ display:flex; gap:6px; align-items:center; }
+  .vswatches i{ width:26px; height:26px; border-radius:7px; border:1px solid rgba(255,255,255,.12); display:block; }
+
+  .rowphones{ display:flex; gap:26px; overflow-x:auto; padding:26px 4px 10px; scroll-snap-type:x proximity; }
+  .rowphones::-webkit-scrollbar{ height:8px; }
+  .rowphones::-webkit-scrollbar-thumb{ background:#2a2e40; border-radius:8px; }
+  figure.ph{ flex:0 0 auto; scroll-snap-align:start; }
+  figure.ph figcaption{ text-align:center; margin-top:12px; font-size:12px; color:var(--page-sub); font-weight:500; }
+
+  /* ---------- Phone device ---------- */
+  .device{
+    width:290px; height:628px; border-radius:42px; position:relative; overflow:hidden;
+    background:var(--bg-grad); color:var(--fg); font-family:var(--font);
+    border:1px solid #000; box-shadow:0 0 0 10px #0c0e16, 0 0 0 11px #23283a, 0 30px 60px -20px rgba(0,0,0,.8);
+    display:flex; flex-direction:column;
+  }
+  .device::after{ content:""; position:absolute; inset:0; pointer-events:none; z-index:5; }
+  [data-theme="cyber"] .device::after{
+    background:repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0 2px, rgba(0,0,0,.18) 2px 3px);
+    mix-blend-mode:overlay; opacity:.5;
+  }
+  .dyn{ position:absolute; top:9px; left:50%; transform:translateX(-50%); width:88px; height:22px; background:#000; border-radius:14px; z-index:6; }
+
+  .statusbar{ height:38px; flex:0 0 38px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; font-size:12px; font-weight:600; color:var(--fg); z-index:4; }
+  .statusbar .sig{ display:flex; gap:5px; align-items:center; opacity:.85; }
+  .statusbar .sig span{ width:16px; height:9px; border:1.4px solid var(--fg); border-radius:2px; display:inline-block; position:relative; }
+  .statusbar .sig span::after{ content:""; position:absolute; inset:1.5px; background:var(--fg); border-radius:1px; }
+
+  /* ---------- App bar ---------- */
+  .appbar{ flex:0 0 auto; padding:6px 16px 12px; display:flex; align-items:center; gap:10px; }
+  .appbar .ttl{ font-weight:700; font-size:16px; letter-spacing:-.01em; }
+  .appbar .sub2{ font-size:11px; color:var(--sub); }
+  .iconbtn{ width:34px; height:34px; border-radius:10px; display:grid; place-items:center; background:var(--card); border:1px solid var(--border); color:var(--fg); cursor:pointer; }
+  .spacer{ flex:1; }
+
+  /* host switcher */
+  .host{ display:flex; align-items:center; gap:8px; background:var(--card); border:1px solid var(--border); padding:7px 11px; border-radius:12px; font-size:12.5px; font-weight:600; }
+  .host .online{ color:var(--acc); font-family:var(--mono); font-size:11px; }
+
+  /* ---------- Screen scroll ---------- */
+  .screen{ flex:1; overflow-y:auto; padding:4px 14px 16px; scrollbar-width:none; }
+  .screen::-webkit-scrollbar{ display:none; }
+  .screen.center{ display:flex; flex-direction:column; justify-content:center; gap:22px; padding:0 20px; }
+
+  /* ---------- Bottom tab bar ---------- */
+  .tabbar{ flex:0 0 auto; display:flex; justify-content:space-around; align-items:center; padding:9px 8px 16px; border-top:1px solid var(--border); background:var(--card); }
+  [data-theme="glass"] .tabbar{ background:rgba(255,255,255,.05); backdrop-filter:blur(14px); }
+  .tab{ display:flex; flex-direction:column; align-items:center; gap:3px; font-size:9.5px; color:var(--sub); flex:1; cursor:pointer; }
+  .tab.on{ color:var(--acc); }
+  [data-theme="cyber"] .tab.on{ text-shadow:0 0 8px var(--acc); }
+
+  /* ---------- Generic components ---------- */
+  .ic{ width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .ic.sm{ width:14px; height:14px; } .ic.tab{ width:21px; height:21px; }
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:13px; }
+  [data-theme="glass"] .card{ background:rgba(255,255,255,.06); backdrop-filter:blur(12px); }
+  .lbl{ font-size:11px; color:var(--sub); font-weight:600; text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; }
+  .head-serif{ font-family:var(--head); }
+
+  .field{ display:flex; align-items:center; gap:9px; background:var(--card-2); border:1px solid var(--border); border-radius:12px; padding:12px 13px; font-size:13px; color:var(--fg); }
+  .field .ph2{ color:var(--sub); } .field.mono{ font-family:var(--mono); letter-spacing:.15em; }
+  .btn{ border:1px solid var(--border); background:var(--card-2); color:var(--fg); border-radius:12px; padding:12px; font-size:13.5px; font-weight:600; width:100%; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; }
+  .btn-primary{ background:var(--acc); color:var(--acc-fg); border-color:transparent; box-shadow:var(--glow) var(--acc); }
+  [data-theme="cyber"] .btn-primary{ box-shadow:0 0 16px -2px var(--acc); }
+
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:7px 11px; border-radius:999px; border:1px solid var(--border); background:var(--card-2); color:var(--sub); }
+  .chip.on{ color:var(--acc); border-color:color-mix(in srgb, var(--acc) 45%, transparent); background:color-mix(in srgb, var(--acc) 12%, transparent); }
+  .chip i{ font-style:normal; font-family:var(--mono); font-size:10px; opacity:.8; }
+
+  .brand{ text-align:center; }
+  .logo{ width:62px; height:62px; margin:0 auto 16px; border-radius:18px; background:var(--acc); color:var(--acc-fg); display:grid; place-items:center; box-shadow:var(--glow) var(--acc); }
+  [data-theme="cyber"] .logo{ box-shadow:0 0 22px -2px var(--acc); }
+  .brand h1{ font-size:23px; font-weight:700; letter-spacing:-.02em; font-family:var(--head); }
+  .brand .sub{ color:var(--sub); font-size:12.5px; margin-top:6px; font-family:var(--mono); }
+  .tls{ display:flex; align-items:center; justify-content:center; gap:7px; color:var(--sub); font-size:11px; margin-top:11px; }
+
+  .sect{ margin-top:16px; }
+  .sect .lbl{ display:flex; justify-content:space-between; align-items:center; }
+  .item{ display:flex; align-items:center; gap:11px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:12px; margin-bottom:9px; }
+  [data-theme="glass"] .item{ background:rgba(255,255,255,.055); backdrop-filter:blur(10px); }
+  .item .ico{ width:38px; height:38px; border-radius:11px; flex:0 0 auto; display:grid; place-items:center; background:var(--card-2); color:var(--acc); }
+  .item .grow{ flex:1; min-width:0; }
+  .item .t1{ font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:7px; }
+  .item .t2{ font-size:11px; color:var(--sub); margin-top:3px; display:flex; align-items:center; gap:6px; font-family:var(--mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dot{ width:8px; height:8px; border-radius:50%; flex:0 0 auto; }
+  .dot.run{ background:var(--acc); box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 25%,transparent); animation:pulse 1.6s infinite; }
+  .dot.wait{ background:#f5b93b; } .dot.done{ background:var(--sub); }
+  @keyframes pulse{ 0%,100%{ opacity:1 } 50%{ opacity:.35 } }
+  .badge{ font-size:9.5px; font-weight:700; padding:2px 7px; border-radius:6px; background:color-mix(in srgb,var(--acc) 15%,transparent); color:var(--acc); font-family:var(--mono); letter-spacing:.02em; }
+  .stat{ font-size:9.5px; font-family:var(--mono); padding:2px 7px; border-radius:6px; border:1px solid var(--border); color:var(--sub); }
+
+  .fab{ position:absolute; right:16px; bottom:78px; width:52px; height:52px; border-radius:17px; background:var(--acc); color:var(--acc-fg); display:grid; place-items:center; box-shadow:0 10px 24px -6px color-mix(in srgb,var(--acc) 60%,transparent); z-index:4; }
+
+  /* ---------- Chat ---------- */
+  .statuspill{ font-size:10px; font-family:var(--mono); color:var(--acc); border:1px solid color-mix(in srgb,var(--acc) 40%,transparent); background:color-mix(in srgb,var(--acc) 10%,transparent); padding:4px 9px; border-radius:999px; display:inline-flex; align-items:center; gap:6px; }
+  .msg{ margin-bottom:12px; max-width:100%; }
+  .msg.user{ display:flex; justify-content:flex-end; }
+  .msg.user .b{ background:var(--acc); color:var(--acc-fg); padding:10px 13px; border-radius:16px 16px 4px 16px; font-size:13px; max-width:82%; font-weight:500; }
+  .msg .ai{ font-size:13px; line-height:1.6; color:var(--fg); }
+  .msg .ai code{ font-family:var(--mono); background:var(--card-2); padding:1px 5px; border-radius:5px; font-size:11.5px; }
+
+  .cardlet{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:11px 12px; margin-bottom:11px; }
+  [data-theme="glass"] .cardlet{ background:rgba(255,255,255,.06); backdrop-filter:blur(10px); }
+  .cardlet .ch{ display:flex; align-items:center; gap:8px; font-size:12px; font-weight:600; }
+  .cardlet .ch .badge2{ margin-left:auto; font-size:10px; color:var(--sub); font-family:var(--mono); }
+  .steps{ margin-top:9px; display:flex; flex-direction:column; gap:7px; }
+  .steps .s{ display:flex; gap:8px; font-size:11.5px; color:var(--sub); }
+  .steps .s b{ color:var(--acc); font-family:var(--mono); }
+  .toolline{ font-family:var(--mono); font-size:11px; color:var(--sub); margin-top:7px; display:flex; align-items:center; gap:7px; }
+  .toolline .k{ color:var(--acc); }
+
+  .difflink{ display:flex; align-items:center; gap:10px; }
+  .difflink .fn{ font-family:var(--mono); font-size:12px; }
+  .plus{ color:#22c55e; font-family:var(--mono); font-size:11px; font-weight:700; }
+  .minus{ color:#ef4444; font-family:var(--mono); font-size:11px; font-weight:700; }
+
+  .approve{ border-color:color-mix(in srgb,#f5b93b 40%,var(--border)); }
+  .approve .ch .badge2{ color:#f5b93b; }
+  .cmd{ font-family:var(--mono); font-size:11.5px; background:var(--card-2); border-radius:8px; padding:8px 10px; margin-top:8px; color:var(--fg); }
+  .approve-actions{ display:flex; gap:8px; margin-top:10px; }
+  .approve-actions .btn{ padding:9px; font-size:12px; }
+  .btn-ok{ background:var(--acc); color:var(--acc-fg); border-color:transparent; }
+  .btn-no{ background:transparent; color:#ef8a8a; border-color:color-mix(in srgb,#ef4444 40%,var(--border)); }
+  .swipehint{ text-align:center; font-size:10px; color:var(--sub); margin-top:7px; }
+
+  .inputbar{ flex:0 0 auto; padding:8px 12px 6px; border-top:1px solid var(--border); }
+  .qc{ display:flex; gap:6px; margin-bottom:8px; overflow-x:auto; scrollbar-width:none; }
+  .qc::-webkit-scrollbar{ display:none; }
+  .qc .q{ flex:0 0 auto; font-size:11px; font-family:var(--mono); color:var(--acc); border:1px solid color-mix(in srgb,var(--acc) 30%,transparent); border-radius:999px; padding:4px 10px; }
+  .composer{ display:flex; align-items:center; gap:9px; background:var(--card-2); border:1px solid var(--border); border-radius:16px; padding:6px 6px 6px 13px; }
+  .composer .txt{ flex:1; font-size:12.5px; color:var(--sub); }
+  .composer .rnd{ width:36px; height:36px; border-radius:12px; display:grid; place-items:center; flex:0 0 auto; }
+  .composer .mic{ color:var(--sub); } .composer .at{ color:var(--sub); }
+  .composer .send{ background:var(--acc); color:var(--acc-fg); }
+
+  /* ---------- Diff page ---------- */
+  .filetabs{ display:flex; gap:8px; margin-bottom:12px; overflow-x:auto; scrollbar-width:none; }
+  .filetabs::-webkit-scrollbar{ display:none; }
+  .ft{ flex:0 0 auto; font-family:var(--mono); font-size:11px; padding:7px 11px; border-radius:10px; border:1px solid var(--border); color:var(--sub); background:var(--card); }
+  .ft.on{ color:var(--fg); border-color:var(--acc); }
+  .diffbox{ background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; font-family:var(--mono); font-size:11px; }
+  .hunkhdr{ background:var(--card-2); color:var(--sub); padding:6px 10px; font-size:10px; display:flex; justify-content:space-between; }
+  .dl{ display:flex; padding:3px 10px; white-space:pre; }
+  .dl .ln{ width:26px; color:var(--sub); opacity:.6; flex:0 0 auto; text-align:right; margin-right:10px; }
+  .dl.add{ background:rgba(34,197,94,.12); } .dl.add .co{ color:#7ee2a8; }
+  .dl.del{ background:rgba(239,68,68,.12); } .dl.del .co{ color:#f3a1a1; }
+  .dl.ctx .co{ color:var(--sub); }
+  .hunkact{ display:flex; gap:8px; padding:9px 10px; border-top:1px solid var(--border); }
+  .hunkact .mini{ font-size:11px; font-weight:600; padding:6px 12px; border-radius:9px; border:1px solid var(--border); display:flex; align-items:center; gap:6px; }
+  .mini.acc{ color:var(--acc); border-color:color-mix(in srgb,var(--acc) 40%,transparent); }
+  .mini.rej{ color:#ef8a8a; }
+  .actionbar{ flex:0 0 auto; display:flex; gap:10px; padding:12px 14px 18px; border-top:1px solid var(--border); background:var(--card); }
+  [data-theme="glass"] .actionbar{ background:rgba(255,255,255,.05); backdrop-filter:blur(14px); }
+
+  /* ---------- Terminal ---------- */
+  .term{ font-family:var(--mono); font-size:11px; line-height:1.75; padding:2px; }
+  .term .p{ color:var(--acc); } .term .u{ color:#7aa7ff; } .term .o{ color:var(--fg); opacity:.9; } .term .d{ color:var(--sub); } .term .g{ color:#7ee2a8; } .term .r{ color:#f3a1a1; }
+  .term .cursor{ display:inline-block; width:7px; height:13px; background:var(--acc); vertical-align:-2px; animation:blink 1.1s steps(1) infinite; }
+  @keyframes blink{ 50%{ opacity:0 } }
+  .keys{ flex:0 0 auto; display:flex; gap:6px; padding:8px 10px; overflow-x:auto; scrollbar-width:none; border-top:1px solid var(--border); }
+  .keys::-webkit-scrollbar{ display:none; }
+  .keys .key{ flex:0 0 auto; font-family:var(--mono); font-size:11px; color:var(--fg); background:var(--card-2); border:1px solid var(--border); border-radius:8px; padding:7px 11px; }
+  .termbar{ flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:8px 12px 16px; }
+  .termbar .pr{ color:var(--acc); font-family:var(--mono); font-weight:700; }
+  .termbar .field{ flex:1; padding:9px 12px; }
+
+  /* Theme heading fonts */
+  [data-theme="cyber"] .brand h1, [data-theme="cyber"] .appbar .ttl{ font-family:'JetBrains Mono',monospace; letter-spacing:.02em; }
+  [data-theme="cyber"] .badge, [data-theme="cyber"] .statuspill{ text-shadow:0 0 8px var(--acc); }
+  [data-theme="warm"] .brand h1, [data-theme="warm"] .appbar .ttl{ font-family:'Fraunces',serif; }
+
+  /* ---------- P6 Web Preview ---------- */
+  .urlbar{ display:flex; align-items:center; gap:8px; background:var(--card-2); border:1px solid var(--border); border-radius:11px; padding:8px 11px; font-family:var(--mono); font-size:11px; color:var(--sub); }
+  .urlbar .lk{ color:var(--acc); } .urlbar .u2{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .devtoggle{ display:flex; gap:0; background:var(--card-2); border:1px solid var(--border); border-radius:10px; padding:3px; margin:10px 0; }
+  .devtoggle span{ flex:1; text-align:center; font-size:11px; font-weight:600; color:var(--sub); padding:6px; border-radius:7px; }
+  .devtoggle span.on{ background:var(--acc); color:var(--acc-fg); }
+  .webview{ position:relative; border:1px solid var(--border); border-radius:12px; overflow:hidden; background:#0d1017; margin:0 auto; }
+  .wv-chrome{ height:22px; background:var(--card-2); display:flex; align-items:center; gap:5px; padding:0 9px; }
+  .wv-chrome i{ width:7px; height:7px; border-radius:50%; background:var(--sub); opacity:.5; display:block; }
+  .wv-body{ padding:14px 12px; }
+  .wv-hero{ height:46px; border-radius:9px; background:linear-gradient(120deg,var(--acc),color-mix(in srgb,var(--acc) 30%,transparent)); display:grid; place-items:center; color:var(--acc-fg); font-weight:700; font-size:13px; }
+  .wv-row{ display:flex; gap:8px; margin-top:10px; }
+  .wv-box{ flex:1; height:34px; border-radius:8px; background:var(--card-2); border:1px solid var(--border); }
+  .wv-line{ height:8px; border-radius:5px; background:var(--card-2); margin-top:9px; }
+  .wv-line.s{ width:55%; }
+  .wv-sel{ position:absolute; border:1.5px dashed var(--acc); border-radius:6px; }
+  .wv-seltag{ position:absolute; font-family:var(--mono); font-size:9px; background:var(--acc); color:var(--acc-fg); padding:1px 5px; border-radius:4px; }
+  .console{ margin-top:10px; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:9px 11px; font-family:var(--mono); font-size:10px; line-height:1.7; }
+  .console .g{ color:#7ee2a8; } .console .d2{ color:var(--sub); }
+  .previewbar{ flex:0 0 auto; display:flex; gap:8px; padding:10px 12px 16px; border-top:1px solid var(--border); }
+  .previewbar .pbtn{ flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11.5px; font-weight:600; padding:9px; border-radius:10px; border:1px solid var(--border); color:var(--sub); background:var(--card); }
+  .previewbar .pbtn.on{ color:var(--acc); border-color:color-mix(in srgb,var(--acc) 40%,transparent); }
+
+  /* ---------- P7 Checkpoint timeline ---------- */
+  .baseline{ display:flex; align-items:center; gap:8px; font-size:11px; color:var(--sub); background:var(--card); border:1px solid var(--border); border-radius:10px; padding:9px 11px; margin-bottom:14px; }
+  .baseline b{ color:var(--acc); font-family:var(--mono); }
+  .timeline{ position:relative; padding-left:26px; }
+  .timeline::before{ content:""; position:absolute; left:8px; top:6px; bottom:6px; width:2px; background:var(--border); }
+  .tl{ position:relative; margin-bottom:14px; }
+  .tl .tdot{ position:absolute; left:-22px; top:3px; width:14px; height:14px; border-radius:50%; background:var(--sub); box-shadow:0 0 0 3px var(--card); }
+  .tl.pending .tdot{ background:#f5b93b; } .tl.accepted .tdot{ background:var(--acc); } .tl.reverted .tdot{ background:var(--sub); }
+  .tl .tcard{ background:var(--card); border:1px solid var(--border); border-radius:12px; padding:11px 12px; }
+  .tl.accepted .tcard{ border-color:color-mix(in srgb,var(--acc) 35%,var(--border)); }
+  .tl .th{ display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600; }
+  .tl .th .tst{ margin-left:auto; font-size:9.5px; font-family:var(--mono); padding:2px 7px; border-radius:6px; }
+  .tst.pend{ color:#f5b93b; background:color-mix(in srgb,#f5b93b 14%,transparent); }
+  .tst.acc{ color:var(--acc); background:color-mix(in srgb,var(--acc) 14%,transparent); }
+  .tst.rev{ color:var(--sub); background:var(--card-2); }
+  .tl .tmeta{ font-family:var(--mono); font-size:10.5px; color:var(--sub); margin-top:6px; display:flex; gap:9px; align-items:center; }
+  .tl .tact{ margin-top:9px; }
+  .revbtn{ display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:600; color:#ef8a8a; border:1px solid color-mix(in srgb,#ef4444 40%,var(--border)); border-radius:9px; padding:6px 11px; }
+  .tl .mile{ font-size:10px; color:var(--sub); margin-top:7px; display:flex; align-items:center; gap:6px; }
+
+  /* checkpoint marker inside chat */
+  .cpmark{ display:flex; align-items:center; gap:8px; margin:2px 0 12px; font-size:10.5px; font-family:var(--mono); color:var(--sub); }
+  .cpmark::before,.cpmark::after{ content:""; height:1px; background:var(--border); flex:1; }
+  .cpmark span{ display:inline-flex; align-items:center; gap:5px; color:var(--sub); }
+
+  .note{ color:var(--page-sub); font-size:12.5px; margin-top:10px; }
+  @media (max-width:640px){ .wrap{ padding:24px 12px 60px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Pocket Coding — 前端设计稿</h1>
+    <div class="tag">// Vibe code anywhere · 13 visual versions × 7 core pages</div>
+    <p>基于 ui-ux-pro-max 设计系统：移动端「AI Agent 指挥官 + 结果审阅台」。每一行是一个视觉版本，横向排列该版本下的 7 个核心页面（连接 / 首页 / 会话 / Diff 审阅 / 终端 / Web 预览联调 / 检查点历史）。横向可滚动查看。V1–V8 既有风格；<b style="color:#E8B4D6">V9–V13 为 brand skill 新增的 5 个品牌</b>（Graphite Carbon / Sunrise Coral / Matrix Forest / Slate Pro / Midnight Plum），各画 P1–P5 五个页面。</p>
+    <div class="meta">
+      <span class="pill"><span class="swatch" style="background:#22C55E"></span> V1–V8 <b>Dark / Light 混合</b></span>
+      <span class="pill"><span class="swatch" style="background:#3B82F6"></span> V9 <b>Graphite Carbon</b></span>
+      <span class="pill"><span class="swatch" style="background:#FF6B6B"></span> V10 <b>Sunrise Coral</b></span>
+      <span class="pill"><span class="swatch" style="background:#84CC16"></span> V11 <b>Matrix Forest</b></span>
+      <span class="pill"><span class="swatch" style="background:#8B5CF6"></span> V12 <b>Slate Pro</b></span>
+      <span class="pill"><span class="swatch" style="background:#E8B4D6"></span> V13 <b>Midnight Plum</b></span>
+    </div>
+  </header>
+  <div id="stages"></div>
+  <p class="note">说明：Diff 审阅 / Web 预览为从会话下钻的详情页，采用「返回 + 底部操作条」，不显示主 Tab 栏；检查点历史含底部导航。P6 预览页演示了「设备宽度切换 + 内嵌 WebView + 选取元素联调 + HMR 日志」；P7 演示了「改动前检查点 → 待接受可回退 / 已接受为 baseline 里程碑（快照清理仅留对话）/ 已回退」。所有配色/圆角/效果均由各版本主题变量驱动，便于一键换肤。</p>
+</div>
+
+<!-- ===== SVG sprite ===== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M7.5 9.5 10.5 12l-3 2.5"/><path d="M12.5 15h4"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.2 12 3l9 7.2V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-msg" viewBox="0 0 24 24"><path d="M21 11.5A8.5 8.5 0 0 1 12.5 20a8.9 8.9 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5z"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4 6l2.1 2.1M17.9 15.9 20 18M2.5 12h3M18.5 12h3M4 18l2.1-2.1M17.9 8.1 20 6"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 20V5M5 12l7-7 7 7"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-git" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="8" r="2.2"/><path d="M6 8.2v7.6M18 10.2A6 6 0 0 1 12 16H8.2"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.5 13.9 8 18.5 9.9 13.9 11.8 12 16.5 10.1 11.8 5.5 9.9 10.1 8z"/><path d="M18.5 15.5l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8z"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2.5v2.5M15 2.5v2.5M9 19v2.5M15 19v2.5M2.5 9H5M2.5 15H5M19 9h2.5M19 15h2.5"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 2v6M15 2v6M6.5 8h11v2.5a5.5 5.5 0 0 1-11 0zM12 16v6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7.5 2.8v5.7c0 4.7-3.2 7.6-7.5 8.7-4.3-1.1-7.5-4-7.5-8.7V5.8z"/></symbol>
+    <symbol id="i-qr" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h3M20 14v3M14 20h6M17 17v3"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4"/></symbol>
+    <symbol id="i-at" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M16 12v1.2a2.8 2.8 0 0 0 5.6 0V12a9.6 9.6 0 1 0-3.8 7.6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5 19 12 7 19.5z"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="7" rx="2"/><rect x="4" y="13" width="16" height="7" rx="2"/><path d="M8 7.5h.01M8 16.5h.01"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-.5 3.5"/><path d="M20 5v6h-6"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/></symbol>
+    <symbol id="i-rewind" viewBox="0 0 24 24"><path d="M11 6 4 12l7 6zM20 6l-7 6 7 6z"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 3.5L16 11H5"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/></symbol>
+    <symbol id="i-pointer" viewBox="0 0 24 24"><path d="M5 3l6 16 2.5-6.5L20 10z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+  </defs>
+</svg>
+
+<script>
+const ic = (id, cls="") => `<svg class="ic ${cls}"><use href="#i-${id}"/></svg>`;
+
+const statusbar = () => `
+  <div class="dyn"></div>
+  <div class="statusbar"><span>9:41</span><span class="sig"><span></span></span></div>`;
+
+const tab = (id,label,on)=>`<div class="tab ${on?'on':''}"><svg class="ic tab"><use href="#i-${id}"/></svg><span>${label}</span></div>`;
+const tabbar = (active) => `
+  <div class="tabbar">
+    ${tab('home','首页',active==='home')}
+    ${tab('msg','会话',active==='chat')}
+    ${tab('folder','文件',active==='files')}
+    ${tab('terminal','终端',active==='term')}
+    ${tab('settings','设置',active==='set')}
+  </div>`;
+
+/* ---------- P1 Connect ---------- */
+const P1 = `
+<article class="device">
+  ${statusbar()}
+  <div class="screen center">
+    <div class="brand">
+      <div class="logo">${ic('terminal')}</div>
+      <h1>Pocket Coding</h1>
+      <div class="sub">// vibe code anywhere</div>
+    </div>
+    <div class="card">
+      <div class="lbl">云主机地址</div>
+      <div class="field">${ic('plug','sm')}<span>box-42.dev.example.com</span></div>
+      <div class="lbl" style="margin-top:12px">配对码</div>
+      <div class="field mono"><span>8 4 · 2 9 · <span class="ph2">■ ■</span></span><span class="spacer"></span><span style="color:var(--acc)">${ic('qr','sm')}</span></div>
+      <button class="btn btn-primary" style="margin-top:14px">${ic('plug','sm')} 连接主机</button>
+      <div class="tls">${ic('shield','sm')} 全程 TLS · 配对码一次有效</div>
+    </div>
+    <div>
+      <div class="lbl">已探测到的工具</div>
+      <div class="chips">
+        <span class="chip on">${ic('spark','sm')} Claude Code <i>1.2</i></span>
+        <span class="chip on">Codex <i>0.9</i></span>
+        <span class="chip on">Cursor <i>agent</i></span>
+      </div>
+    </div>
+  </div>
+</article>`;
+
+/* ---------- P2 Home ---------- */
+const P2 = `
+<article class="device">
+  ${statusbar()}
+  <div class="appbar">
+    <div class="host">${ic('server','sm')} prod-box <span class="online">● 3 online</span></div>
+    <span class="spacer"></span>
+    <div class="iconbtn">${ic('search','sm')}</div>
+  </div>
+  <div class="screen">
+    <div class="sect">
+      <div class="lbl">项目 · Workspaces</div>
+      <div class="item"><div class="ico">${ic('folder','sm')}</div><div class="grow"><div class="t1">pocket-coding</div><div class="t2">${ic('git','sm')} main · <span class="plus">+24</span> <span class="minus">-3</span></div></div>${ic('chev','sm')}</div>
+      <div class="item"><div class="ico">${ic('folder','sm')}</div><div class="grow"><div class="t1">payments-api</div><div class="t2">${ic('git','sm')} feat/webhook · clean</div></div>${ic('chev','sm')}</div>
+    </div>
+    <div class="sect">
+      <div class="lbl">最近会话 · Sessions</div>
+      <div class="item"><div class="ico">${ic('spark','sm')}</div><div class="grow"><div class="t1">登录页记住密码 <span class="badge">CLAUDE</span></div><div class="t2"><span class="dot run"></span>执行中 · 改动 3 文件</div></div></div>
+      <div class="item"><div class="ico">${ic('cpu','sm')}</div><div class="grow"><div class="t1">重构 webhook 校验 <span class="badge">CODEX</span></div><div class="t2"><span class="dot wait"></span>等待审批 · rm -rf tmp</div></div></div>
+      <div class="item"><div class="ico">${ic('cpu','sm')}</div><div class="grow"><div class="t1">补单元测试 <span class="badge">CURSOR</span></div><div class="t2"><span class="dot done"></span>已完成 · 2 小时前</div></div></div>
+    </div>
+  </div>
+  <div class="fab">${ic('plus')}</div>
+  ${tabbar('home')}
+</article>`;
+
+/* ---------- P3 Chat ---------- */
+const P3 = `
+<article class="device">
+  ${statusbar()}
+  <div class="appbar">
+    <div class="iconbtn">${ic('back','sm')}</div>
+    <div><div class="ttl">pocket-coding</div><div class="sub2">Claude Code · Sonnet</div></div>
+    <span class="spacer"></span>
+    <div class="iconbtn">${ic('monitor','sm')}</div>
+    <div class="iconbtn">${ic('history','sm')}</div>
+    <span class="statuspill"><span class="dot run"></span>执行中</span>
+  </div>
+  <div class="screen">
+    <div class="msg user"><div class="b">给登录页加个「记住密码」功能，并跑一下测试</div></div>
+    <div class="cpmark"><span>${ic('history','sm')} 检查点 · 已快照改动前</span></div>
+    <div class="cardlet">
+      <div class="ch">${ic('spark','sm')} 执行计划 <span class="badge2">Plan</span></div>
+      <div class="steps">
+        <div class="s"><b>1</b> 读取 login.tsx，定位表单</div>
+        <div class="s"><b>2</b> 新增 checkbox + localStorage 逻辑</div>
+        <div class="s"><b>3</b> 运行 npm test 验证</div>
+      </div>
+    </div>
+    <div class="cardlet">
+      <div class="ch">${ic('file','sm')} 读取文件</div>
+      <div class="toolline"><span class="k">read</span> src/pages/login.tsx <span class="spacer"></span>1.4kb</div>
+    </div>
+    <div class="cardlet difflink">
+      <span style="color:var(--acc)">${ic('file','sm')}</span>
+      <div class="grow"><div class="fn">login.tsx</div><div class="toolline"><span class="plus">+24</span> <span class="minus">-3</span> · 点击审阅</div></div>
+      ${ic('chev','sm')}
+    </div>
+    <div class="msg"><div class="ai">已加入「记住密码」并用 <code>localStorage</code> 持久化。现在需要运行测试：</div></div>
+    <div class="cardlet approve">
+      <div class="ch">${ic('play','sm')} 请求执行命令 <span class="badge2">需审批</span></div>
+      <div class="cmd">$ npm test -- login.spec.ts</div>
+      <div class="approve-actions">
+        <button class="btn btn-ok">${ic('check','sm')} 通过</button>
+        <button class="btn btn-no">${ic('x','sm')} 拒绝</button>
+      </div>
+      <div class="swipehint">← 右滑拒绝 · 左滑通过</div>
+    </div>
+  </div>
+  <div class="inputbar">
+    <div class="qc"><span class="q">/plan</span><span class="q">/fix</span><span class="q">/test</span><span class="q">/explain</span></div>
+    <div class="composer">
+      <div class="rnd at">${ic('at','sm')}</div>
+      <div class="txt">输入需求，或长按说话…</div>
+      <div class="rnd mic">${ic('mic','sm')}</div>
+      <div class="rnd send">${ic('send','sm')}</div>
+    </div>
+  </div>
+</article>`;
+
+/* ---------- P4 Diff ---------- */
+const P4 = `
+<article class="device">
+  ${statusbar()}
+  <div class="appbar">
+    <div class="iconbtn">${ic('back','sm')}</div>
+    <div><div class="ttl">Diff 审阅</div><div class="sub2">vs baseline · <span class="plus">+31</span> <span class="minus">-6</span></div></div>
+    <span class="spacer"></span>
+    <div class="iconbtn">${ic('copy','sm')}</div>
+  </div>
+  <div class="screen">
+    <div class="filetabs">
+      <div class="ft on">login.tsx +24 -3</div>
+      <div class="ft">auth.ts +7 -3</div>
+    </div>
+    <div class="diffbox">
+      <div class="hunkhdr"><span>@@ src/pages/login.tsx</span><span>Hunk 1/2</span></div>
+      <div class="dl ctx"><span class="ln">41</span><span class="co">  const [pwd,setPwd]=useState('')</span></div>
+      <div class="dl add"><span class="ln">42</span><span class="co">+ const [remember,setR]=useState(true)</span></div>
+      <div class="dl ctx"><span class="ln">43</span><span class="co">  return (</span></div>
+      <div class="dl del"><span class="ln">44</span><span class="co">-   &lt;button&gt;登录&lt;/button&gt;</span></div>
+      <div class="dl add"><span class="ln">44</span><span class="co">+   &lt;label&gt;&lt;input type="checkbox"/&gt;</span></div>
+      <div class="dl add"><span class="ln">45</span><span class="co">+     记住密码&lt;/label&gt;</span></div>
+      <div class="hunkact">
+        <div class="mini acc">${ic('check','sm')} 接受</div>
+        <div class="mini rej">${ic('x','sm')} 拒绝</div>
+      </div>
+    </div>
+  </div>
+  <div class="actionbar">
+    <button class="btn btn-no">${ic('rewind','sm')} 回退改动前</button>
+    <button class="btn btn-primary">${ic('check','sm')} 接受 · 更新 baseline</button>
+  </div>
+</article>`;
+
+/* ---------- P5 Terminal ---------- */
+const P5 = `
+<article class="device">
+  ${statusbar()}
+  <div class="appbar">
+    <div><div class="ttl">Terminal</div><div class="sub2">prod-box · ~/pocket-coding</div></div>
+    <span class="spacer"></span>
+    <div class="iconbtn">${ic('stop','sm')}</div>
+  </div>
+  <div class="screen">
+    <div class="term">
+<div><span class="u">gun@prod-box</span><span class="d">:~/pocket-coding$</span> <span class="o">npm test -- login.spec.ts</span></div>
+<div class="d">&gt; jest login.spec.ts</div>
+<div class="g"> PASS  src/pages/login.spec.ts</div>
+<div class="o">  ✓ renders remember checkbox (28ms)</div>
+<div class="o">  ✓ persists to localStorage (12ms)</div>
+<div class="d">Tests: <span class="g">2 passed</span>, 2 total</div>
+<div class="d">Time:  1.84s</div>
+<div><span class="p">$</span> git status</div>
+<div class="o">On branch <span class="g">main</span></div>
+<div class="r">  modified: src/pages/login.tsx</div>
+<div><span class="p">$</span> <span class="cursor"></span></div>
+    </div>
+  </div>
+  <div class="keys">
+    <span class="key">esc</span><span class="key">tab</span><span class="key">ctrl</span><span class="key">/</span><span class="key">←</span><span class="key">↑</span><span class="key">↓</span><span class="key">→</span>
+  </div>
+  <div class="termbar">
+    <span class="pr">$</span>
+    <div class="field"><span class="ph2">输入命令…</span></div>
+    <div class="iconbtn" style="background:var(--acc);color:var(--acc-fg);border:none">${ic('send','sm')}</div>
+  </div>
+</article>`;
+
+/* ---------- P6 Web Preview (前后端联调) ---------- */
+const P6 = `
+<article class="device">
+  ${statusbar()}
+  <div class="appbar">
+    <div class="iconbtn">${ic('back','sm')}</div>
+    <div><div class="ttl">Web 预览</div><div class="sub2">dev server · <span style="color:var(--acc)">● ready</span></div></div>
+    <span class="spacer"></span>
+    <div class="iconbtn">${ic('refresh','sm')}</div>
+  </div>
+  <div class="screen">
+    <div class="urlbar">${ic('lock','sm')}<span class="u2">host/preview/tok_ab12/login</span>${ic('globe','sm')}</div>
+    <div class="devtoggle"><span class="on">Mobile</span><span>Tablet</span><span>Desktop</span></div>
+    <div class="webview" style="width:210px">
+      <div class="wv-chrome"><i></i><i></i><i></i></div>
+      <div class="wv-body">
+        <div class="wv-hero">登录 · Login</div>
+        <div class="wv-line"></div><div class="wv-line s"></div>
+        <div class="wv-row"><div class="wv-box"></div><div class="wv-box"></div></div>
+        <div class="wv-sel" style="left:12px; top:74px; right:12px; height:22px"></div>
+        <div class="wv-seltag" style="left:12px; top:56px">label.remember</div>
+      </div>
+    </div>
+    <div class="console">
+      <div class="g">VITE v5 ready in 420 ms</div>
+      <div class="d2">➜ Local: 127.0.0.1:5173 · HMR connected</div>
+      <div class="g">POST /api/login → 200 (联调 OK)</div>
+    </div>
+  </div>
+  <div class="previewbar">
+    <div class="pbtn on">${ic('pointer','sm')} 选取元素</div>
+    <div class="pbtn">${ic('terminal','sm')} 日志</div>
+    <div class="pbtn">${ic('refresh','sm')} 重启</div>
+  </div>
+</article>`;
+
+/* ---------- P7 Checkpoint timeline (对话历史 + 回滚) ---------- */
+const P7 = `
+<article class="device">
+  ${statusbar()}
+  <div class="appbar">
+    <div class="iconbtn">${ic('back','sm')}</div>
+    <div><div class="ttl">检查点 · 历史</div><div class="sub2">对话与改动全留存</div></div>
+  </div>
+  <div class="screen">
+    <div class="baseline">${ic('flag','sm')} 当前 baseline：<b>#cp5 已接受</b> · 之后为待审阅改动</div>
+    <div class="timeline">
+      <div class="tl pending">
+        <div class="tdot"></div>
+        <div class="tcard">
+          <div class="th">${ic('spark','sm')} 登录页记住密码 <span class="tst pend">待接受</span></div>
+          <div class="tmeta">${ic('file','sm')} login.tsx <span class="plus">+24</span> <span class="minus">-3</span> · 刚刚</div>
+          <div class="tact"><span class="revbtn">${ic('rewind','sm')} 回退到本次改动前</span></div>
+        </div>
+      </div>
+      <div class="tl pending">
+        <div class="tdot"></div>
+        <div class="tcard">
+          <div class="th">${ic('cpu','sm')} 补充 auth 校验 <span class="tst pend">待接受</span></div>
+          <div class="tmeta">${ic('file','sm')} auth.ts <span class="plus">+7</span> <span class="minus">-3</span> · 5 分钟前</div>
+          <div class="tact"><span class="revbtn">${ic('rewind','sm')} 回退到本次改动前</span></div>
+        </div>
+      </div>
+      <div class="tl accepted">
+        <div class="tdot"></div>
+        <div class="tcard">
+          <div class="th">${ic('flag','sm')} 初始化登录表单 <span class="tst acc">已接受</span></div>
+          <div class="tmeta">${ic('git','sm')} baseline #cp5 · 2 小时前</div>
+          <div class="mile">${ic('lock','sm')} 快照已清理，仅保留对话 · 不可回退到此之前</div>
+        </div>
+      </div>
+      <div class="tl reverted">
+        <div class="tdot"></div>
+        <div class="tcard">
+          <div class="th">${ic('rewind','sm')} 试改主题色 <span class="tst rev">已回退</span></div>
+          <div class="tmeta">${ic('history','sm')} 改动已丢弃 · 对话保留</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  ${tabbar('chat')}
+</article>`;
+
+const CAP = ['P1 · 连接 / 配对','P2 · 首页 Home','P3 · 会话 Chat（核心）','P4 · Diff 审阅','P5 · 终端 Terminal','P6 · Web 预览（联调）','P7 · 检查点 / 历史'];
+const PAGES = [P1,P2,P3,P4,P5,P6,P7];
+const CAP5 = ['P1 · 连接 / 配对','P2 · 首页 Home','P3 · 会话 Chat（核心）','P4 · Diff 审阅','P5 · 终端 Terminal'];
+const PAGES5 = [P1,P2,P3,P4,P5];
+const phonesRow = () => `<div class="rowphones">${PAGES.map((p,i)=>`<figure class="ph">${p}<figcaption>${CAP[i]}</figcaption></figure>`).join('')}</div>`;
+const phonesRow5 = () => `<div class="rowphones">${PAGES5.map((p,i)=>`<figure class="ph">${p}<figcaption>${CAP5[i]}</figcaption></figure>`).join('')}</div>`;
+
+const THEMES = [
+  { id:'terminal', name:'V1 · Terminal Green (OLED)', desc:'纯正开发者气质：深黑底 + 终端成功绿，等宽字点缀。最贴合工具属性，推荐默认。', sw:['#020617','#0E1223','#22C55E','#243049'], pages:7 },
+  { id:'glass',    name:'V2 · Aurora Glass',          desc:'高级通透：深蓝渐变 + 毛玻璃卡片 + 靛紫强调色，精致 SaaS 质感。', sw:['#0b1020','rgba(255,255,255,.08)','#818CF8','#2b3566'], pages:7 },
+  { id:'cyber',    name:'V3 · Cyberpunk HUD',         desc:'潮酷赛博：近黑底 + 霓虹青强调 + 扫描线 + 等宽标题，demo 吸睛。', sw:['#0a0a0f','#101018','#00E5FF','#1e2440'], pages:7 },
+  { id:'warm',     name:'V4 · Claude Warm',           desc:'温暖亲和：暖夜色 + 陶土橙强调 + 衬线标题，弱化机器感、更亲人。', sw:['#1C1917','#262321','#D97757','#3a332e'], pages:7 },
+  { id:'linear',   name:'V5 · Linear Minimal',        desc:'克制锐利：近黑 + 靛蓝强调 + 极细边框 + 高信息密度，效率党首选。', sw:['#08090A','#121316','#7C86E8','rgba(255,255,255,.10)'], pages:7 },
+  { id:'swiss',    name:'V6 · Swiss Light (Paper)',    desc:'唯一浅色版：纸白底 + 墨黑正文 + 单一电光蓝强调 + 极小圆角，Swiss Modernism 网格化、克制专业，适合日间/阅读向。', sw:['#F4F4F2','#FFFFFF','#2563EB','#E2E2DC'], pages:7 },
+  { id:'bruta',    name:'V7 · Neo Brutalism',         desc:'张扬个性：奶油底 + 3px 纯黑粗边 + 硬阴影(无模糊) + Space Grotesk 粗体标题 + 番茄红强调，Gen-Z 潮玩感、demo 极吸睛。', sw:['#FDF3DC','#FFFFFF','#EF3E36','#0B0B0B'], pages:7 },
+  { id:'synth',    name:'V8 · Synthwave Sunset',      desc:'复古赛博：深紫渐变 + 品红霓虹 + 透视网格 + 辉光，80s 蒸汽波氛围，与 Cyberpunk 的冷青形成暖调对照。', sw:['#0c0620','#221041','#FF4D9D','#3d2166'], pages:7 },
+  { id:'graphite', name:'V9 · Graphite Carbon',        desc:'高端工作站气质：石墨灰底 + 钴蓝强调 + 哑光金属质感，细边框、冷峻内敛，专业感拉满。由 brand skill 生成。', sw:['#0d0f13','#161922','#3B82F6','#2A2F3A'], pages:5 },
+  { id:'coral',    name:'V10 · Sunrise Coral',         desc:'清晨友好感：奶油米底 + 珊瑚红强调 + 薄荷绿次色，大圆角 20px、柔和阴影，亲和无威胁。由 brand skill 生成。', sw:['#FFF8F3','#FFFFFF','#FF6B6B','#F0D9C7'], pages:5 },
+  { id:'forest',   name:'V11 · Matrix Forest',         desc:'森林深绿底 + 苔藓黄绿强调，雾面有机自然主义，区别于 V1 的黑底亮绿（本版色相偏黄绿、底色偏绿黑）。由 brand skill 生成。', sw:['#06120e','#11201B','#84CC16','#1F3328'], pages:5 },
+  { id:'slate',    name:'V12 · Slate Pro',             desc:'Notion/Linear 同源专业灰：冷灰白底 + 紫罗兰强调，极小圆角 8px、信息密度最高，浅色对照 V5。由 brand skill 生成。', sw:['#FAFAFA','#FFFFFF','#8B5CF6','#E5E7EB'], pages:5 },
+  { id:'plum',     name:'V13 · Midnight Plum',         desc:'暗夜深紫底 + 玫瑰金强调，优雅微辉光、贵族感，区别于 V8 的品红霓虹（本版无网格、无霓虹、更内敛）。由 brand skill 生成。', sw:['#15091f','#241434','#E8B4D6','#3D2655'], pages:5 },
+];
+
+document.getElementById('stages').innerHTML = THEMES.map(t=>`
+  <section class="version" data-theme="${t.id}">
+    <div class="vhead" data-theme="${t.id}">
+      <div><div class="vname">${t.name}</div><div class="vdesc">${t.desc}</div></div>
+      <div class="vswatches">${t.sw.map(c=>`<i style="background:${c}"></i>`).join('')}</div>
+    </div>
+    ${t.pages===5 ? phonesRow5() : phonesRow()}
+  </section>`).join('');
+</script>
+
+<style>
+  /* Theme variable definitions (scoped per section) */
+  [data-theme="terminal"]{ --bg-grad:radial-gradient(120% 80% at 50% -10%,#0b1220,#020617 60%); --card:#0E1223; --card-2:#141b30; --fg:#F8FAFC; --sub:#94A3B8; --acc:#22C55E; --acc-fg:#04140a; --border:#243049; --danger:#EF4444; --radius:16px; --font:'Inter',sans-serif; --mono:'JetBrains Mono',monospace; --head:'Inter',sans-serif; --glow:0 6px 20px -6px; }
+  [data-theme="glass"]{ --bg-grad:linear-gradient(160deg,#0b1020,#141d42 45%,#0a0f24); --card:rgba(255,255,255,.06); --card-2:rgba(255,255,255,.09); --fg:#F1F5FF; --sub:#A6B0D6; --acc:#818CF8; --acc-fg:#0b0f24; --border:rgba(255,255,255,.14); --danger:#F87171; --radius:20px; --font:'Inter',sans-serif; --mono:'JetBrains Mono',monospace; --head:'Inter',sans-serif; --glow:0 8px 24px -6px; }
+  [data-theme="cyber"]{ --bg-grad:linear-gradient(180deg,#0a0a0f,#0c0c14); --card:#101018; --card-2:#15151f; --fg:#E6FBFF; --sub:#7f9aa6; --acc:#00E5FF; --acc-fg:#001417; --border:#1e2440; --danger:#FF3B6B; --radius:8px; --font:'Inter',sans-serif; --mono:'JetBrains Mono',monospace; --head:'JetBrains Mono',monospace; --glow:0 0 18px -2px; }
+  [data-theme="warm"]{ --bg-grad:radial-gradient(120% 80% at 50% -10%,#2a2320,#1C1917 62%); --card:#262321; --card-2:#2f2a27; --fg:#F5EFE9; --sub:#B3A79D; --acc:#D97757; --acc-fg:#1a0f0a; --border:#3a332e; --danger:#E5695B; --radius:18px; --font:'Inter',sans-serif; --mono:'JetBrains Mono',monospace; --head:'Fraunces',serif; --glow:0 8px 22px -8px; }
+  [data-theme="linear"]{ --bg-grad:linear-gradient(180deg,#0b0c0e,#08090A); --card:#121316; --card-2:#191b1f; --fg:#EDEEF2; --sub:#8A8F98; --acc:#7C86E8; --acc-fg:#0a0b14; --border:rgba(255,255,255,.10); --danger:#EB5757; --radius:10px; --font:'Inter',sans-serif; --mono:'JetBrains Mono',monospace; --head:'Inter',sans-serif; --glow:0 6px 18px -6px; }
+
+  /* V6 Swiss Light — 唯一浅色，纸白 + 墨黑 + 单一电光蓝，锐利小圆角 */
+  [data-theme="swiss"]{ --bg-grad:linear-gradient(180deg,#FBFBF9,#EEEEEA); --card:#FFFFFF; --card-2:#F3F3EF; --fg:#0A0A0A; --sub:#5F5F5F; --acc:#2563EB; --acc-fg:#FFFFFF; --border:#E2E2DC; --danger:#DC2626; --radius:6px; --font:'Inter',sans-serif; --mono:'JetBrains Mono',monospace; --head:'Inter',sans-serif; --glow:0 4px 14px -8px; }
+  /* V7 Neo Brutalism — 奶油底 + 纯黑粗边 + 硬阴影 + 番茄红，Space Grotesk 粗标题 */
+  [data-theme="bruta"]{ --bg-grad:linear-gradient(180deg,#FEF7E2,#FAEFCF); --card:#FFFFFF; --card-2:#FFF4D4; --fg:#0B0B0B; --sub:#6B6350; --acc:#EF3E36; --acc-fg:#0B0B0B; --border:#0B0B0B; --danger:#D62828; --radius:4px; --font:'Inter',sans-serif; --mono:'JetBrains Mono',monospace; --head:'Space Grotesk',sans-serif; --glow:2px 2px 0; }
+  /* V8 Synthwave Sunset — 深紫渐变 + 品红霓虹 + 透视网格 + 辉光 */
+  [data-theme="synth"]{ --bg-grad:linear-gradient(180deg,#1b0b33,#0c0620 62%,#170a2c); --card:#1F0F3D; --card-2:#2A1552; --fg:#F6E9FF; --sub:#B199D8; --acc:#FF4D9D; --acc-fg:#26082F; --border:#3D2166; --danger:#FF5C7A; --radius:14px; --font:'Inter',sans-serif; --mono:'JetBrains Mono',monospace; --head:'Inter',sans-serif; --glow:0 0 20px -4px; }
+
+  /* ---- V6/V7 浅色主题：修正为深色底设计的 diff/终端/预览可读性 ---- */
+  [data-theme="swiss"] .plus,[data-theme="bruta"] .plus{ color:#12833F; }
+  [data-theme="swiss"] .minus,[data-theme="bruta"] .minus{ color:#D62828; }
+  [data-theme="swiss"] .dl.add,[data-theme="bruta"] .dl.add{ background:rgba(18,131,63,.13); }
+  [data-theme="swiss"] .dl.add .co,[data-theme="bruta"] .dl.add .co{ color:#0F7A3D; }
+  [data-theme="swiss"] .dl.del,[data-theme="bruta"] .dl.del{ background:rgba(214,40,40,.12); }
+  [data-theme="swiss"] .dl.del .co,[data-theme="bruta"] .dl.del .co{ color:#C0392B; }
+  [data-theme="swiss"] .term .g,[data-theme="bruta"] .term .g,
+  [data-theme="swiss"] .console .g,[data-theme="bruta"] .console .g{ color:#0F7A3D; }
+  [data-theme="swiss"] .term .u,[data-theme="bruta"] .term .u{ color:#2563EB; }
+  [data-theme="swiss"] .term .r,[data-theme="bruta"] .term .r{ color:#C0392B; }
+  [data-theme="swiss"] .webview,[data-theme="bruta"] .webview{ background:#FFFFFF; }
+  [data-theme="swiss"] .wv-chrome i,[data-theme="bruta"] .wv-chrome i{ background:#0B0B0B; opacity:.32; }
+
+  /* ---- V7 Neo Brutalism：粗黑边 + 硬阴影 + 粗体标题 ---- */
+  [data-theme="bruta"] .card,[data-theme="bruta"] .item,[data-theme="bruta"] .cardlet,
+  [data-theme="bruta"] .field,[data-theme="bruta"] .btn,[data-theme="bruta"] .console,
+  [data-theme="bruta"] .webview,[data-theme="bruta"] .baseline,[data-theme="bruta"] .diffbox,
+  [data-theme="bruta"] .composer,[data-theme="bruta"] .tl .tcard{ border-width:2.5px; border-color:#0B0B0B; box-shadow:3px 3px 0 #0B0B0B; }
+  [data-theme="bruta"] .btn-primary,[data-theme="bruta"] .logo{ box-shadow:3px 3px 0 #0B0B0B; }
+  [data-theme="bruta"] .iconbtn{ border-width:2px; border-color:#0B0B0B; box-shadow:2px 2px 0 #0B0B0B; }
+  [data-theme="bruta"] .brand h1,[data-theme="bruta"] .appbar .ttl,
+  [data-theme="bruta"] .msg.user .b{ font-family:'Space Grotesk',sans-serif; font-weight:700; }
+  [data-theme="bruta"] .badge,[data-theme="bruta"] .chip{ border:2px solid #0B0B0B; }
+
+  /* ---- V8 Synthwave：透视网格叠层 + 霓虹辉光 ---- */
+  [data-theme="synth"] .device::after{
+    background:linear-gradient(transparent 62%, rgba(255,77,157,.05)),
+      repeating-linear-gradient(transparent 0 21px, rgba(255,77,157,.06) 21px 22px);
+    opacity:.55;
+  }
+  [data-theme="synth"] .btn-primary,[data-theme="synth"] .logo{ box-shadow:0 0 20px -2px var(--acc); }
+  [data-theme="synth"] .badge,[data-theme="synth"] .statuspill,
+  [data-theme="synth"] .tab.on,[data-theme="synth"] .brand h1{ text-shadow:0 0 8px var(--acc); }
+
+  /* ============ V9 Graphite Carbon — 石墨灰 + 钴蓝，哑光金属 ============ */
+  [data-theme="graphite"]{
+    --bg-grad:radial-gradient(120% 80% at 50% -10%,#1a1d24,#0d0f13 60%);
+    --card:#161922; --card-2:#1d212c; --fg:#E5E7EB; --sub:#8B8F9A;
+    --acc:#3B82F6; --acc-fg:#0a0f1d; --border:#2A2F3A; --danger:#EF4444;
+    --radius:12px; --font:'Inter Tight','Inter',sans-serif; --mono:'JetBrains Mono',monospace;
+    --head:'Inter Tight','Inter',sans-serif; --glow:0 6px 18px -8px;
+  }
+  [data-theme="graphite"] .brand h1,[data-theme="graphite"] .appbar .ttl{ font-family:'Inter Tight','Inter',sans-serif; letter-spacing:-.02em; }
+  [data-theme="graphite"] .btn-primary,[data-theme="graphite"] .logo{ box-shadow:0 6px 18px -8px var(--acc); }
+  [data-theme="graphite"] .item:hover,[data-theme="graphite"] .cardlet:hover{ border-color:#3B82F6; }
+
+  /* ============ V10 Sunrise Coral — 奶油米 + 珊瑚红，大圆角柔和 ============ */
+  [data-theme="coral"]{
+    --bg-grad:linear-gradient(180deg,#FFF8F3,#FDEEE2);
+    --card:#FFFFFF; --card-2:#FFF1E6; --fg:#2B1F1A; --sub:#8C7568;
+    --acc:#FF6B6B; --acc-fg:#FFFFFF; --border:#F0D9C7; --danger:#DC2626;
+    --radius:20px; --font:'DM Sans','Inter',sans-serif; --mono:'JetBrains Mono',monospace;
+    --head:'DM Sans','Inter',sans-serif; --glow:0 10px 24px -10px;
+  }
+  [data-theme="coral"] .brand h1,[data-theme="coral"] .appbar .ttl{ font-family:'DM Sans','Inter',sans-serif; }
+  [data-theme="coral"] .btn-primary,[data-theme="coral"] .logo{ box-shadow:0 10px 24px -10px var(--acc); }
+  /* 浅色主题：修正 diff/终端配色 */
+  [data-theme="coral"] .plus{ color:#12833F; }
+  [data-theme="coral"] .minus{ color:#D62828; }
+  [data-theme="coral"] .dl.add{ background:rgba(18,131,63,.13); } [data-theme="coral"] .dl.add .co{ color:#0F7A3D; }
+  [data-theme="coral"] .dl.del{ background:rgba(214,40,40,.12); } [data-theme="coral"] .dl.del .co{ color:#C0392B; }
+  [data-theme="coral"] .term .g,[data-theme="coral"] .console .g{ color:#0F7A3D; }
+  [data-theme="coral"] .term .u{ color:#2563EB; } [data-theme="coral"] .term .r{ color:#C0392B; }
+  [data-theme="coral"] .term .p{ color:#FF6B6B; } [data-theme="coral"] .webview{ background:#FFFFFF; }
+  [data-theme="coral"] .wv-chrome i{ background:#2B1F1A; opacity:.32; }
+  [data-theme="coral"] .msg.user .b{ color:#FFFFFF; }
+
+  /* ============ V11 Matrix Forest — 森林深绿 + 苔藓黄绿，雾面有机 ============ */
+  [data-theme="forest"]{
+    --bg-grad:radial-gradient(120% 80% at 50% -10%,#0f1f1a,#06120e 60%);
+    --card:#11201B; --card-2:#16291F; --fg:#E8F0E5; --sub:#8FA89A;
+    --acc:#84CC16; --acc-fg:#0a1a0a; --border:#1F3328; --danger:#EF4444;
+    --radius:14px; --font:'Outfit','Inter',sans-serif; --mono:'JetBrains Mono',monospace;
+    --head:'Outfit','Inter',sans-serif; --glow:0 8px 22px -8px;
+  }
+  [data-theme="forest"] .brand h1,[data-theme="forest"] .appbar .ttl{ font-family:'Outfit','Inter',sans-serif; }
+  [data-theme="forest"] .btn-primary,[data-theme="forest"] .logo{ box-shadow:0 8px 22px -8px var(--acc); }
+  [data-theme="forest"] .term .p,[data-theme="forest"] .statuspill{ color:#84CC16; }
+
+  /* ============ V12 Slate Pro — 冷灰白 + 紫罗兰，极小圆角信息密集 ============ */
+  [data-theme="slate"]{
+    --bg-grad:linear-gradient(180deg,#FAFAFA,#F1F2F4);
+    --card:#FFFFFF; --card-2:#F4F5F7; --fg:#1A1B1E; --sub:#6B7280;
+    --acc:#8B5CF6; --acc-fg:#FFFFFF; --border:#E5E7EB; --danger:#DC2626;
+    --radius:8px; --font:'Inter','Inter',sans-serif; --mono:'JetBrains Mono',monospace;
+    --head:'Inter','Inter',sans-serif; --glow:0 4px 12px -6px;
+  }
+  [data-theme="slate"] .brand h1,[data-theme="slate"] .appbar .ttl{ font-family:'Inter',sans-serif; letter-spacing:-.02em; }
+  [data-theme="slate"] .btn-primary,[data-theme="slate"] .logo{ box-shadow:0 4px 12px -6px var(--acc); }
+  [data-theme="slate"] .plus{ color:#12833F; } [data-theme="slate"] .minus{ color:#D62828; }
+  [data-theme="slate"] .dl.add{ background:rgba(18,131,63,.12); } [data-theme="slate"] .dl.add .co{ color:#0F7A3D; }
+  [data-theme="slate"] .dl.del{ background:rgba(214,40,40,.10); } [data-theme="slate"] .dl.del .co{ color:#C0392B; }
+  [data-theme="slate"] .term .g,[data-theme="slate"] .console .g{ color:#0F7A3D; }
+  [data-theme="slate"] .term .u{ color:#8B5CF6; } [data-theme="slate"] .term .r{ color:#C0392B; }
+  [data-theme="slate"] .term .p{ color:#8B5CF6; } [data-theme="slate"] .webview{ background:#FFFFFF; }
+  [data-theme="slate"] .wv-chrome i{ background:#1A1B1E; opacity:.32; }
+  [data-theme="slate"] .msg.user .b{ color:#FFFFFF; }
+  /* 信息密集：缩小内边距 */
+  [data-theme="slate"] .card,[data-theme="slate"] .cardlet,[data-theme="slate"] .item{ padding:10px; }
+  [data-theme="slate"] .screen{ padding:4px 12px 14px; }
+
+  /* ============ V13 Midnight Plum — 暗夜深紫 + 玫瑰金，优雅微辉光 ============ */
+  [data-theme="plum"]{
+    --bg-grad:radial-gradient(120% 80% at 50% -10%,#2a1840,#15091f 60%);
+    --card:#241434; --card-2:#2E1A44; --fg:#F3E8F5; --sub:#B79BC8;
+    --acc:#E8B4D6; --acc-fg:#1f0a2a; --border:#3D2655; --danger:#FF5C7A;
+    --radius:16px; --font:'Plus Jakarta Sans','Inter',sans-serif; --mono:'JetBrains Mono',monospace;
+    --head:'Plus Jakarta Sans','Inter',sans-serif; --glow:0 8px 24px -8px;
+  }
+  [data-theme="plum"] .brand h1,[data-theme="plum"] .appbar .ttl{ font-family:'Plus Jakarta Sans','Inter',sans-serif; letter-spacing:-.02em; }
+  [data-theme="plum"] .btn-primary,[data-theme="plum"] .logo{ box-shadow:0 8px 24px -8px var(--acc); }
+  [data-theme="plum"] .badge,[data-theme="plum"] .statuspill,[data-theme="plum"] .tab.on{ color:#E8B4D6; }
+  [data-theme="plum"] .term .p{ color:#E8B4D6; } [data-theme="plum"] .term .u{ color:#C4B5FD; }
+</style>
+</body>
+</html>
