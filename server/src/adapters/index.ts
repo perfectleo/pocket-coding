@@ -1,10 +1,12 @@
 import type { ToolAdapter, ToolId } from '../protocol.js';
 import { claudeCodeAdapter } from './claude-code.js';
 import { codexAdapter } from './codex.js';
+import { codebuddyAdapter } from './codebuddy.js';
 
 export const adapters: Record<ToolId, ToolAdapter> = {
   'claude-code': claudeCodeAdapter,
   codex: codexAdapter,
+  codebuddy: codebuddyAdapter,
 };
 
 export function getAdapter(id: string): ToolAdapter | undefined {

@@ -28,6 +28,11 @@ export interface SessionRow {
   last_seq: number;
   baseline_ref: string | null;
   created_at: number;
+  // Added by migration — nullable for rows created before the column existed.
+  cwd: string | null;
+  external_session_id: string | null;
+  has_run_once: number;
+  permission_mode: string | null;
 }
 
 export interface MessageRow {
@@ -78,6 +83,12 @@ export class Store {
     this.db = new Database(path);
     this.db.pragma('journal_mode = WAL');
     this.migrate();
+  }
+
+  /** Expose the raw DB handle for tests / migrations. Production code should
+   *  use the typed methods above rather than touching this directly. */
+  get rawDb(): Database.Database {
+    return this.db;
   }
 
   private migrate(): void {
@@ -153,7 +164,29 @@ export class Store {
         created_at INTEGER NOT NULL,
         revoked_at INTEGER
       );
+      CREATE TABLE IF NOT EXISTS push_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        token TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        UNIQUE(device_id, platform, token)
+      );
+      CREATE INDEX IF NOT EXISTS idx_push_tokens_device ON push_tokens(device_id);
     `);
+    // Idempotent column adds — CREATE TABLE IF NOT EXISTS won't add columns
+    // to an existing table, so old databases need ALTER for new fields.
+    this.ensureColumn('sessions', 'cwd', 'TEXT');
+    this.ensureColumn('sessions', 'external_session_id', 'TEXT');
+    this.ensureColumn('sessions', 'has_run_once', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('sessions', 'permission_mode', "TEXT NOT NULL DEFAULT 'default'");
+  }
+
+  private ensureColumn(table: string, col: string, def: string): void {
+    const cols = this.db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!cols.some((c) => c.name === col)) {
+      this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+    }
   }
 
   // ---------- pair codes ----------
@@ -193,6 +226,9 @@ export class Store {
       | DeviceRow
       | undefined;
   }
+  listDevices(): DeviceRow[] {
+    return this.db.prepare(`SELECT * FROM devices ORDER BY paired_at DESC`).all() as DeviceRow[];
+  }
   touchDevice(id: string): void {
     this.db.prepare(`UPDATE devices SET last_seen_at = ? WHERE id = ?`).run(Date.now(), id);
   }
@@ -201,8 +237,8 @@ export class Store {
   createSession(s: SessionRow): void {
     this.db
       .prepare(
-        `INSERT INTO sessions (id, project_id, tool_id, model, state, tmux_name, last_seq, baseline_ref, created_at)
-         VALUES (?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO sessions (id, project_id, tool_id, model, state, tmux_name, last_seq, baseline_ref, created_at, cwd, external_session_id, has_run_once, permission_mode)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         s.id,
@@ -214,6 +250,10 @@ export class Store {
         s.last_seq,
         s.baseline_ref,
         s.created_at,
+        s.cwd,
+        s.external_session_id,
+        s.has_run_once,
+        s.permission_mode ?? 'default',
       );
   }
   getSession(id: string): SessionRow | undefined {
@@ -235,6 +275,27 @@ export class Store {
   updateSessionBaseline(id: string, ref: string): void {
     this.db.prepare(`UPDATE sessions SET baseline_ref = ? WHERE id = ?`).run(ref, id);
   }
+  updateSessionExternalId(id: string, externalId: string): void {
+    this.db.prepare(`UPDATE sessions SET external_session_id = ? WHERE id = ?`).run(externalId, id);
+  }
+  markSessionRunOnce(id: string): void {
+    this.db.prepare(`UPDATE sessions SET has_run_once = 1 WHERE id = ?`).run(id);
+  }
+  updateSessionMode(id: string, mode: string): void {
+    this.db.prepare(`UPDATE sessions SET permission_mode = ? WHERE id = ?`).run(mode, id);
+  }
+  deleteSessionCascade(sessionId: string): void {
+    // Order: child rows first, then the session row itself. Use a transaction
+    // so a partial delete doesn't leave the DB in a half-state.
+    this.db.transaction(() => {
+      this.db.prepare(`DELETE FROM messages WHERE session_id = ?`).run(sessionId);
+      this.db.prepare(`DELETE FROM approvals WHERE session_id = ?`).run(sessionId);
+      this.db.prepare(`DELETE FROM checkpoints WHERE session_id = ?`).run(sessionId);
+      this.db.prepare(`DELETE FROM audit WHERE session_id = ?`).run(sessionId);
+      this.db.prepare(`DELETE FROM preview_tokens WHERE session_id = ?`).run(sessionId);
+      this.db.prepare(`DELETE FROM sessions WHERE id = ?`).run(sessionId);
+    })();
+  }
 
   // ---------- messages ----------
   appendMessage(m: MessageRow): void {
@@ -245,7 +306,7 @@ export class Store {
       )
       .run(m.id, m.session_id, m.seq, m.role, m.type, m.payload, m.turn_id, m.created_at);
   }
-  listMessages(sessionId: string, afterSeq = 0): MessageRow[] {
+  listMessages(sessionId: string, afterSeq = -1): MessageRow[] {
     return this.db
       .prepare(
         `SELECT * FROM messages WHERE session_id = ? AND seq > ? ORDER BY seq ASC`,
@@ -291,8 +352,23 @@ export class Store {
       )
       .all(sessionId) as CheckpointRow[];
   }
+  getCheckpoint(id: string): CheckpointRow | undefined {
+    return this.db.prepare(`SELECT * FROM checkpoints WHERE id = ?`).get(id) as
+      | CheckpointRow
+      | undefined;
+  }
   updateCheckpointStatus(id: string, status: string): void {
     this.db.prepare(`UPDATE checkpoints SET status = ? WHERE id = ?`).run(status, id);
+  }
+  getApproval(id: string): ApprovalRow | undefined {
+    return this.db.prepare(`SELECT * FROM approvals WHERE id = ?`).get(id) as
+      | ApprovalRow
+      | undefined;
+  }
+  listApprovals(sessionId: string): ApprovalRow[] {
+    return this.db
+      .prepare(`SELECT * FROM approvals WHERE session_id = ? ORDER BY created_at ASC`)
+      .all(sessionId) as ApprovalRow[];
   }
 
   // ---------- audit ----------
@@ -324,6 +400,25 @@ export class Store {
   }
   revokePreviewToken(token: string): void {
     this.db.prepare(`UPDATE preview_tokens SET revoked_at = ? WHERE token = ?`).run(Date.now(), token);
+  }
+
+  // ---------- push tokens ----------
+  registerPushToken(deviceId: string, platform: 'ios' | 'android', token: string): void {
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO push_tokens (device_id, platform, token, created_at) VALUES (?,?,?,?)`,
+      )
+      .run(deviceId, platform, token, Date.now());
+  }
+  unregisterPushToken(deviceId: string, token: string): void {
+    this.db
+      .prepare(`DELETE FROM push_tokens WHERE device_id = ? AND token = ?`)
+      .run(deviceId, token);
+  }
+  listPushTokens(deviceId: string): Array<{ platform: string; token: string }> {
+    return this.db
+      .prepare(`SELECT platform, token FROM push_tokens WHERE device_id = ?`)
+      .all(deviceId) as Array<{ platform: string; token: string }>;
   }
 
   close(): void {
