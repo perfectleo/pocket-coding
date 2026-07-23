@@ -9,6 +9,7 @@ import '../../core/protocol.dart';
 import '../../core/state/app_state.dart';
 import '../../core/theme/theme.dart';
 import '../../core/ws/client.dart';
+import '../terminal/terminal_page.dart';
 import 'chat_state.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
@@ -60,6 +61,28 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         );
       }
     });
+  }
+
+  /// Open the interactive pty terminal for this session. Wires TerminalPage's
+  /// injected callbacks/stream to the WS term channel: keystrokes/resize go
+  /// out via WsClient, and incoming { t:'term' } bytes are filtered from the
+  /// shared event stream into the page's `incoming` stream.
+  void _openTerminal(ChatState chat) {
+    final ws = ref.read(wsClientProvider);
+    if (ws == null) return;
+    final sid = widget.sessionId;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => TerminalPage(
+        sessionId: sid,
+        onOpen: () => ws.termOpen(sid),
+        onClose: () => ws.termClose(sid),
+        onInput: (d) => ws.termData(sid, d),
+        onResize: (c, r) => ws.resize(sid, c, r),
+        incoming: ws.events
+            .where((m) => m.t == 'term' && m.sessionId == sid)
+            .map((m) => m.data ?? ''),
+      ),
+    ));
   }
 
   @override
@@ -233,6 +256,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               tooltip: '中断',
               onPressed: () => ref.read(chatStateProvider(widget.sessionId).notifier).interrupt(),
             ),
+          // Interactive pty terminal entry (M3). Only enabled once the tool has
+          // captured an externalSessionId (so the TUI can --resume and share
+          // context) and the tool actually has an interactive TUI (codex exec
+          // has none). Otherwise disabled with an explanatory tooltip.
+          Builder(builder: (_) {
+            final canTerminal =
+                chat.toolId != 'codex' && chat.externalSessionId != null;
+            return IconButton(
+              icon: Icon(Icons.terminal,
+                  color: canTerminal ? t.foreground : t.sub.withValues(alpha: 0.4)),
+              tooltip: canTerminal ? '终端' : '先发一条消息再打开终端',
+              onPressed: canTerminal ? () => _openTerminal(chat) : null,
+            );
+          }),
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert, color: t.sub),
             color: t.card,

@@ -78,6 +78,10 @@ class ChatState {
   final String? projectId;
   final String? toolId;
   final String? model;
+  // The AI tool's own session id. Non-null only after the first turn (or a
+  // desktop import) captured it. The pty terminal channel can only --resume
+  // (share context) when this is set — the UI gates the terminal entry on it.
+  final String? externalSessionId;
   const ChatState({
     required this.sessionId,
     required this.lastSeq,
@@ -88,6 +92,7 @@ class ChatState {
     this.projectId,
     this.toolId,
     this.model,
+    this.externalSessionId,
   });
   ChatState copyWith({
     int? lastSeq,
@@ -98,6 +103,7 @@ class ChatState {
     String? projectId,
     String? toolId,
     String? model,
+    String? externalSessionId,
   }) =>
       ChatState(
         sessionId: sessionId,
@@ -109,6 +115,7 @@ class ChatState {
         projectId: projectId ?? this.projectId,
         toolId: toolId ?? this.toolId,
         model: model ?? this.model,
+        externalSessionId: externalSessionId ?? this.externalSessionId,
       );
 }
 
@@ -168,6 +175,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
           toolId: me.toolId,
           model: me.model,
           permissionMode: me.permissionMode,
+          externalSessionId: me.externalSessionId,
         );
       }
     } catch (_) {}

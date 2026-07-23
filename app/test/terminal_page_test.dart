@@ -30,7 +30,7 @@ void main() {
         onOpen: () {},
         onClose: () {},
         onInput: (_) {},
-        onResize: (_, __) {},
+        onResize: (cols, rows) {},
         incoming: controller.stream,
       ),
     ));
