@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
     "test:watch": "node --import tsx --test --watch test/*.test.ts",
-    "test:kernel": "POCKET_KERNEL_E2E=1 node --import tsx --test --test-force-exit test/kernel.e2e.test.ts"
+    "test:kernel": "POCKET_KERNEL_E2E=1 node --import tsx --test --test-force-exit test/kernel.e2e.test.ts",
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",
