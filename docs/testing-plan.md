@@ -83,7 +83,19 @@ npm run test:watch    # 监听模式
    **二次导入幂等**（`alreadyImported:true`、`backfilled:0`、消息数不翻倍）→
    发现列表标记 `imported:true`。
 
-4. **内核 E2E（真实 CLI，慢，可选）**
+4. **M3 PTY 终端通道（已落地）**
+   - `test/terminal-adapter.test.ts` — `buildTerminalCommand` 三工具行为：claude 用
+     空格分隔 `--resume <id>`（externalSessionId 为空时不带）、codebuddy 用等号
+     `--resume=<id>`、codex 返回 null；且终端命令**不含** `--input-format`（交互式）。
+   - `test/terminal-manager.test.ts` — 用 `cat` 作确定性 PTY 替身：`open`→`write` 回显
+     经 `onData`→`close` 触发 `onExit` 且 `has` 转 false；`resize` 在活跃 PTY 上不抛异常。
+   - `test/ws-terminal.e2e.test.ts` — 真实 WS + 端口，monkey-patch adapter 指向 `cat`：
+     `attach`→`term_open`→`term`（回显含输入）→`term_close`→收到 `term_exit`；未知会话
+     `term_open` 回结构化 `error`。
+   > node-pty 原生模块须可加载；若 `posix_spawnp failed`，检查 prebuilt `spawn-helper`
+   > 可执行位（`postinstall` 已兜底 `chmod +x`），必要时 `npm rebuild node-pty`。
+
+5. **内核 E2E（真实 CLI，慢，可选）**
    打开 `POCKET_RESIDENT_PROCESS=true`，对真实安装的 `claude` / `codex` /
    `codebuddy` 跑一轮最小对话，断言会话文件生成、`--resume` 可续、审批写回生效。
    标记为 slow，仅在本机或专用 job 运行（CI 默认跳过）。
@@ -107,12 +119,16 @@ flutter test          # 单元 + widget 测试（test/ 目录）
 1. **单元测试（已落地）**
    - `test/protocol_test.dart` — `SessionSummary.resumeCommand()`、
      `nextPermissionMode` 循环、`SessionSummary`/`MessageRecord`/`HostSession`
-     的 `fromJson`（含 `source` 默认值、`cwd` 默认值）。
+     的 `fromJson`（含 `source` 默认值、`cwd` 默认值）；M3：`ServerMessage` 解析
+     `term`（`data`）与 `term_exit`（从 `code` 读 `exitCode`）。
 
 2. **Widget 测试（已落地）**
    - `test/widget_test.dart` — 最小 smoke（保证 CI 绿）。
    - `test/chat_render_test.dart` — 用真实 CLI stream-json fixture 驱动
      `ChatNotifier._onMessage`，验证渲染管线与去重。
+   - `test/terminal_page_test.dart` — M3 终端页 smoke：`TerminalPage` 可构建、
+     initState 触发 `onOpen`、incoming 流字节写入 xterm 不抛异常（回调/Stream 注入，
+     不依赖真实 WsClient）。
    - `test/home_page_test.dart` — 用 `ProviderScope(overrides: [...])` 注入
      **假 `ApiClient`**（覆写 `listSessions`/`listHostSessions`/`importHostSession`/
      `deleteSession`），并把 `HomePage` 挂到**自建 `GoRouter`**（`/`、`/theme`、
@@ -175,6 +191,18 @@ flutter test integration_test -d <device-id>
 4. 把上面第 3 步逐条写成 `integration_test/*.dart`，通过环境变量传入
    `SERVER_URL`，仅当服务端可达时执行（否则 skip）。
 
+### M3 PTY 终端通道手测清单（需真机/浏览器 + 真实 `claude` CLI）
+
+1. `cd server && npm run dev`；`cd app && flutter run -d chrome`（或真机）。
+2. 配对 → 新建 claude 会话 → **先发一条普通消息**（让 `externalSessionId` 生成，
+   终端入口才启用）。
+3. 点 AppBar「终端」→ 应看到黑色终端，claude 交互式 TUI 启动。
+4. 输入 `/help` → **应正常显示帮助**（不再是 "isn't available in this environment"）。
+5. 试 `/model`、`/clear`、`/compact` → 均按真实 CLI 行为响应。
+6. 退出终端 → 回聊天页发消息 → 上下文延续（structured `--resume` 接回终端里的变更）。
+7. 验证单进程约束：开终端时 structured 进程被中断，无双进程写同一会话冲突。
+8. 验证入口门控：`externalSessionId == null` 的新会话与 codex 会话，终端入口禁用/隐藏。
+
 ### 一键联调脚本（已落地）
 
 `scripts/e2e.sh` 把这条链路封成一条命令，并用 `trap` 兜底清理，避免端口占用：
@@ -234,13 +262,16 @@ cd app && flutter test integration_test -d <device-id>
 - [x] 服务端单元级集成测试：`sqlite.test.ts`（8）/ `backfill.test.ts`（5，含幂等）/ `session-scanner.test.ts`（6，含 mtime 排序/限流/过滤/`findHostSession`）
 - [x] 服务端 WS 通道 e2e：`test/ws.e2e.test.ts`（真实端口，覆盖发消息唯一通道——无 token/无效 token 拒绝、握手、ping/pong、input 未知会话结构化 error、attach 未知会话容错，5 用例）
 - [x] 服务端 REST 主链路遗漏 e2e：`test/http-flows.e2e.test.ts`（配对失败 401/400 与暴力破解限流 429、新建会话+校验+删除、workspace 浏览与路径越权/绝对路径拒绝，9 用例）
-- [x] 服务端套件共 **45 用例**通过（typecheck 通过、无 lint）
+- [x] 服务端 M3 PTY 终端通道：`terminal-adapter.test.ts`（buildTerminalCommand 三工具）/ `terminal-manager.test.ts`（node-pty 生命周期，cat 替身）/ `ws-terminal.e2e.test.ts`（真实 WS term_open/term/term_close/term_exit + 未知会话 error）
+- [x] 服务端套件共 **55 用例**通过（typecheck 通过、无 lint）
 - [x] App 单测：`protocol_test.dart`（10 用例）+ 修复 `widget_test.dart`（共 11 通过）
-- [x] App widget 测试：`home_page_test.dart`（注入假 `ApiClient` + 自建 `GoRouter`，覆盖首页列表/空态/错误态/删除流程/导入 sheet 交互与导航，8 用例通过；App 套件共 25 通过）
+- [x] App widget 测试：`home_page_test.dart`（注入假 `ApiClient` + 自建 `GoRouter`，覆盖首页列表/空态/错误态/删除流程/导入 sheet 交互与导航，8 用例通过）
+- [x] App M3 终端：`protocol_test.dart` 新增 term/term_exit 解析（共 12）+ `terminal_page_test.dart` 终端页 smoke（2）；App 套件共 **29 通过**
 - [x] App 集成测试骨架 `integration_test/app_boot_test.dart` + `integration_test` 依赖
 - [x] App 真机主链路集成测试 `integration_test/e2e_flow_test.dart`（`SERVER_URL` 驱动，不可达 skip；analyze 通过）
 - [x] 一键联调脚本 `scripts/e2e.sh`（起服务→等 `/api/health`→跑集成测试透传 `SERVER_URL`→`trap` 清理）
 - [x] 清理：删除错放在 `server/test/` 下的 Flutter 计数器模板 `widget_test.dart`
 - [x] CI 工作流 `.github/workflows/ci.yml`
 - [ ] 内核 e2e（真实 CLI，slow，可选）：`POCKET_RESIDENT_PROCESS=true` 下对真实 `claude`/`codex`/`codebuddy` 发消息拿流式回复、`--resume` 续接、审批写回
+- [ ] M3 终端手测（真机/浏览器 + 真实 `claude`）：`/help` `/model` `/clear` 按真实 CLI 行为工作、开终端中断 structured 进程、关终端后上下文延续、入口门控（externalSessionId==null / codex 禁用）
 ```

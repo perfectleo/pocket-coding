@@ -272,13 +272,20 @@ GET  /api/sessions/{id}/diff
 { "t": "input",  "sessionId": "...", "text": "给登录页加记住密码" }
 { "t": "approve","sessionId": "...", "callId": "c1", "approve": true }
 { "t": "interrupt", "sessionId": "..." }
-{ "t": "resize", "cols": 80, "rows": 24 }
+{ "t": "resize", "sessionId": "...", "cols": 80, "rows": 24 }
+// M3 交互式 PTY 终端通道（按需拉起，见 4.10）
+{ "t": "term_open",  "sessionId": "..." }
+{ "t": "term",       "sessionId": "...", "data": "ls\r" }
+{ "t": "term_close", "sessionId": "..." }
 
 // Server → Client (每条带 seq)
 { "seq": 129, "t": "event", "sessionId": "...", "event": { /* AgentEvent */ } }
 { "seq": 130, "t": "status","sessionId": "...", "state": "waiting_approval" }
 { "seq": 131, "t": "checkpoint", "sessionId": "...", "cpId": "cp7", "kind": "created" }
 { "seq": 132, "t": "preview", "sessionId": "...", "state": "ready", "url": "/preview/tok/" }
+// M3 终端字节流（transient，不落库、不占 seq）与退出通知
+{ "seq": 0,   "t": "term",      "sessionId": "...", "data": "..." }
+{ "seq": 0,   "t": "term_exit", "sessionId": "...", "code": 0 }
 ```
 
 ### 4.6 安全
@@ -334,6 +341,48 @@ baseline = B0 (初始/上次接受态)
 3. 接受变更：baseline ref 前移；prune 掉不再需要的改动前快照（`git update-ref -d` + `git gc`）；此后 diff 以新 baseline 为基准。
 4. Diff baseline：始终维护 `baseline` ref；`GET /diff` = 工作树 vs baseline。
 5. 支持整体接受与按 hunk/文件接受。
+
+### 4.10 M3：交互式 PTY 终端通道（双通道会话）
+
+**动机**：structured 通道走 `claude --input-format stream-json`（非交互程序化接口），
+Claude Code 已知问题导致所有 slash 命令在该模式下返回 "isn't available in this
+environment"——slash 命令（`/help` `/model` `/clear` `/compact` 等）是交互式 TUI 专属功能。
+为此给每个会话新增一条**按需拉起**的交互式 PTY 终端通道，让用户在 App 里获得与电脑命令行
+100% 一致的原生体验，同时保留 structured 通道的卡片渲染 / 审批门控 / 持久化能力。
+
+**双通道架构**
+```
+                 ┌──────────────── 同一会话 ────────────────┐
+structured 通道   │  claude --input-format stream-json        │  卡片/审批/落库/seq
+（日常聊天主通道）│  ← SessionManager.proc（常驻子进程）      │
+                 │                                           │
+PTY 终端通道      │  claude --resume <externalSessionId>      │  xterm 字节流
+（按需，M3 新增） │  ← TerminalManager（node-pty，交互式 TUI）│  transient 不落库
+                 └───────────────────────────────────────────┘
+        两通道通过 CLI 自身持久化的 externalSessionId + --resume 共享同一段对话上下文
+```
+
+**关键设计**
+- **上下文共享**：CLI 每条消息带 `session_id`，服务端捕获并持久化为 `externalSessionId`。
+  终端进程用 `--resume <externalSessionId>` 打开同一段对话——终端里执行的 `/model`、
+  `/compact` 等变更，会在下次 structured turn 的 `--resume` 中自动继承（对话历史由 CLI
+  持久化在 `~/.claude/`，不在本项目 SQLite 里）。
+- **单进程约束**：同一会话任意时刻只允许一个进程持有。打开终端前先中断（SIGINT）该会话的
+  structured 常驻进程并置空；终端关闭后 structured 通道在下次 `input()` 时自动 `--resume` 接回。
+- **消息流**：`term_open`/`term`（键入字节）/`resize`/`term_close` 为 Client→Server；
+  服务端把 PTY stdout 作为 `{ t:'term' }` 广播给 `session.subscribers`，PTY 退出时广播
+  `{ t:'term_exit', code }`。终端字节流 **transient**：不落 SQLite、不占 seq、重连不回放
+  （xterm 的 scrollback 是客户端内存态）。
+- **App 侧**：`TerminalPage`（xterm.dart）通过回调/Stream 注入与 WsClient 解耦；ChatPage
+  AppBar 的「终端」入口在满足条件时启用。
+
+**MVP 限制（重要）**
+- 仅当会话已有 `externalSessionId`（至少跑过一次 structured turn，或从桌面导入）时，终端才能
+  `--resume` 共享上下文。若为 null，App 端禁用终端入口并提示「先发一条消息再打开终端」。
+- `codex` 用 `exec`（非交互），本期不支持终端：适配器 `buildTerminalCommand` 返回 null，
+  UI 隐藏/禁用入口。
+- node-pty 预编译包在解压时可能丢失 `spawn-helper` 的可执行位（导致 `posix_spawnp failed`），
+  `server/package.json` 的 `postinstall` 会在安装后 `chmod +x` 兜底修复。
 
 ---
 
