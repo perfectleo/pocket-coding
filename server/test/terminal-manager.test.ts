@@ -1,6 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TerminalManager } from '../src/session/terminal.js';
+import { TerminalManager, sanitizeTerminalEnv } from '../src/session/terminal.js';
+
+test('sanitizeTerminalEnv strips nested-agent markers, keeps auth/config', () => {
+  const out = sanitizeTerminalEnv({
+    CLAUDECODE: '1',
+    CLAUDE_CODE_ENTRYPOINT: 'cli',
+    CLAUDE_CODE_SSE_PORT: '54321',
+    ANTHROPIC_API_KEY: 'sk-xxx',
+    ANTHROPIC_BASE_URL: 'https://api.example.com',
+    PATH: '/usr/bin',
+    UNDEF: undefined,
+  });
+  // Nesting markers gone → a fresh claude won't think it's nested.
+  assert.equal('CLAUDECODE' in out, false);
+  assert.equal('CLAUDE_CODE_ENTRYPOINT' in out, false);
+  assert.equal('CLAUDE_CODE_SSE_PORT' in out, false);
+  // Auth/config preserved → login & model routing still work.
+  assert.equal(out.ANTHROPIC_API_KEY, 'sk-xxx');
+  assert.equal(out.ANTHROPIC_BASE_URL, 'https://api.example.com');
+  assert.equal(out.PATH, '/usr/bin');
+  // undefined values dropped.
+  assert.equal('UNDEF' in out, false);
+});
 
 test('open → write echoes back via onData → close fires onExit', async () => {
   const tm = new TerminalManager();
