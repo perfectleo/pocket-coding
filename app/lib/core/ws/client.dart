@@ -114,6 +114,14 @@ class WsClient {
     send({'t': 'interrupt', 'sessionId': sessionId});
   }
 
+  // ---- M3 pty terminal channel ----
+  void termOpen(String sessionId) => send({'t': 'term_open', 'sessionId': sessionId});
+  void termClose(String sessionId) => send({'t': 'term_close', 'sessionId': sessionId});
+  void termData(String sessionId, String data) =>
+      send({'t': 'term', 'sessionId': sessionId, 'data': data});
+  void resize(String sessionId, int cols, int rows) =>
+      send({'t': 'resize', 'sessionId': sessionId, 'cols': cols, 'rows': rows});
+
   Future<void> close() async {
     _closed = true;
     _heartbeat?.cancel();
