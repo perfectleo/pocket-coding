@@ -53,6 +53,9 @@ export type ClientMessage =
   | { t: 'mode'; sessionId: string; mode?: PermissionMode }   // mode omitted => cycle; present => set directly
   // Raw terminal byte stream from the app's terminal view to the pty (M3).
   | { t: 'term'; sessionId: string; data: string }
+  // Open/close the interactive pty terminal channel for a session (M3).
+  | { t: 'term_open'; sessionId: string }
+  | { t: 'term_close'; sessionId: string }
   | { t: 'ping' };
 
 export type ServerMessage =
@@ -64,6 +67,8 @@ export type ServerMessage =
   // Raw terminal byte stream from the pty to the app's terminal view (M3).
   // Not persisted / not seq-tracked — transient bytes for live rendering.
   | { seq: number; t: 'term'; sessionId: string; data: string }
+  // The pty exited (user typed `exit`, or process died). code = exit status.
+  | { seq: number; t: 'term_exit'; sessionId: string; code: number }
   | { seq: number; t: 'error'; sessionId?: string; message: string }
   | { seq: number; t: 'pong' };
 
