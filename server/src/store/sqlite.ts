@@ -44,6 +44,13 @@ export interface MessageRow {
   payload: string;
   turn_id: string | null;
   created_at: number;
+  // Added by migration — 'app' (live) or 'external' (backfilled from the
+  // tool's own session file). Optional on write (defaults to 'app'); rows read
+  // back from an old DB may have it null.
+  source?: string | null;
+  // For 'external' rows: a stable reference to the source turn/line in the
+  // tool session file, used to dedupe on repeated backfills.
+  external_turn_ref?: string | null;
 }
 
 export interface ApprovalRow {
@@ -180,6 +187,13 @@ export class Store {
     this.ensureColumn('sessions', 'external_session_id', 'TEXT');
     this.ensureColumn('sessions', 'has_run_once', 'INTEGER NOT NULL DEFAULT 0');
     this.ensureColumn('sessions', 'permission_mode', "TEXT NOT NULL DEFAULT 'default'");
+    // M1.4: single-source-of-truth backfill. messages gains provenance so we
+    // can merge turns that happened in the desktop terminal without dupes.
+    this.ensureColumn('messages', 'source', "TEXT");
+    this.ensureColumn('messages', 'external_turn_ref', 'TEXT');
+    this.db.exec(
+      `CREATE INDEX IF NOT EXISTS idx_messages_ext_ref ON messages(session_id, external_turn_ref)`,
+    );
   }
 
   private ensureColumn(table: string, col: string, def: string): void {
@@ -261,6 +275,11 @@ export class Store {
       | SessionRow
       | undefined;
   }
+  getSessionByExternalId(externalId: string): SessionRow | undefined {
+    return this.db
+      .prepare(`SELECT * FROM sessions WHERE external_session_id = ? LIMIT 1`)
+      .get(externalId) as SessionRow | undefined;
+  }
   listSessions(): SessionRow[] {
     return this.db
       .prepare(`SELECT * FROM sessions ORDER BY created_at DESC`)
@@ -301,10 +320,21 @@ export class Store {
   appendMessage(m: MessageRow): void {
     this.db
       .prepare(
-        `INSERT INTO messages (id, session_id, seq, role, type, payload, turn_id, created_at)
-         VALUES (?,?,?,?,?,?,?,?)`,
+        `INSERT INTO messages (id, session_id, seq, role, type, payload, turn_id, created_at, source, external_turn_ref)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`,
       )
-      .run(m.id, m.session_id, m.seq, m.role, m.type, m.payload, m.turn_id, m.created_at);
+      .run(
+        m.id,
+        m.session_id,
+        m.seq,
+        m.role,
+        m.type,
+        m.payload,
+        m.turn_id,
+        m.created_at,
+        m.source ?? 'app',
+        m.external_turn_ref ?? null,
+      );
   }
   listMessages(sessionId: string, afterSeq = -1): MessageRow[] {
     return this.db
@@ -312,6 +342,28 @@ export class Store {
         `SELECT * FROM messages WHERE session_id = ? AND seq > ? ORDER BY seq ASC`,
       )
       .all(sessionId, afterSeq) as MessageRow[];
+  }
+  countMessages(sessionId: string): number {
+    const row = this.db
+      .prepare(`SELECT COUNT(*) as n FROM messages WHERE session_id = ?`)
+      .get(sessionId) as { n: number };
+    return row.n;
+  }
+  maxSeq(sessionId: string): number {
+    const row = this.db
+      .prepare(`SELECT MAX(seq) as m FROM messages WHERE session_id = ?`)
+      .get(sessionId) as { m: number | null };
+    return row.m ?? 0;
+  }
+  /** True if a backfilled turn with this external ref already exists — used
+   *  to make transcript backfill idempotent across repeated reconciliations. */
+  hasExternalRef(sessionId: string, ref: string): boolean {
+    const row = this.db
+      .prepare(
+        `SELECT 1 FROM messages WHERE session_id = ? AND external_turn_ref = ? LIMIT 1`,
+      )
+      .get(sessionId, ref);
+    return !!row;
   }
 
   // ---------- approvals ----------

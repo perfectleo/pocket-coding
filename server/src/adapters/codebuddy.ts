@@ -32,6 +32,8 @@ export const codebuddyAdapter: ToolAdapter = {
   id: 'codebuddy',
   displayName: 'CodeBuddy',
   mode: 'structured',
+  // Same stream-json input protocol as claude — supports a resident process.
+  supportsResidentStdin: true,
 
   async detect() {
     return detectCodebuddy();

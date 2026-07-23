@@ -98,6 +98,38 @@ class ApiClient {
     }
   }
 
+  /// Session detail — includes the ready-to-copy desktop resume command.
+  Future<SessionDetail> getSession(String sessionId) async {
+    final j = await get('/api/sessions/$sessionId');
+    return SessionDetail.fromJson(j);
+  }
+
+  /// List conversations started from the desktop terminal (host scan).
+  Future<List<HostSession>> listHostSessions({String? tool, String? cwd}) async {
+    final q = <String>[];
+    if (tool != null) q.add('tool=${Uri.encodeQueryComponent(tool)}');
+    if (cwd != null) q.add('cwd=${Uri.encodeQueryComponent(cwd)}');
+    final path = '/api/hosts/sessions${q.isEmpty ? '' : '?${q.join('&')}'}';
+    final j = await get(path);
+    final list = j['sessions'] as List? ?? const [];
+    return list.map((e) => HostSession.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// Import a desktop session into Pocket, backfilling its history. Returns
+  /// the local session id to open.
+  Future<({String id, int backfilled})> importHostSession({
+    required String toolId,
+    required String externalSessionId,
+    required String cwd,
+  }) async {
+    final j = await post('/api/hosts/sessions/import', {
+      'toolId': toolId,
+      'externalSessionId': externalSessionId,
+      'cwd': cwd,
+    });
+    return (id: j['id'] as String, backfilled: (j['backfilled'] as num?)?.toInt() ?? 0);
+  }
+
   Future<String> workspaceRoot() async {
     final j = await get('/api/roots');
     return j['root'] as String;

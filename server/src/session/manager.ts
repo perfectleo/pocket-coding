@@ -276,6 +276,15 @@ export class SessionManager {
       await this.maybeSnapshot(session, ev, store);
       await this.maybeGateApproval(session, ev, store, adapter);
       this.emitEvent(session, ev, store);
+
+      // Resident model: the process does NOT exit between turns, so proc.close
+      // won't fire to reset the state. Drive the turn-completion transition off
+      // the tool's own end-of-turn signal (claude `result` / codex
+      // `turn.completed` both map to a status event) so the session returns to
+      // idle (ready for next input) or surfaces an error.
+      if (ev.type === 'status' && this.isResident(adapter) && session.proc) {
+        this.setState(session, ev.state === 'error' ? 'error' : 'idle', store);
+      }
     }
   }
 
@@ -355,12 +364,11 @@ export class SessionManager {
     store.decideApproval(approvalId, decision ? 'approved' : 'rejected');
     store.audit(session.id, 'approval_decided', ev.id, JSON.stringify({ decision }));
 
-    // Forward the decision to the AI tool's stdin (where applicable). With
-    // per-turn stdin.end() in input(), the stream may already be closed;
-    // the write fails silently — the decision is still recorded in the DB
-    // for audit, and a denied command surfaces as a tool_result the tool
-    // already produced. Improving this requires keeping stdin open across
-    // the approval window, which is a larger refactor.
+    // Forward the decision to the AI tool's stdin. In the resident model
+    // (M2) stdin stays open across the approval window, so this write now
+    // actually reaches the tool and controls its behavior in real time —
+    // no longer a silent audit-only record. In one-shot mode the stream may
+    // already be closed; the write is a no-op and the DB record stands.
     const stdin = session.proc?.stdin;
     if (stdin && !stdin.destroyed && adapter?.encodeApproval) {
       try {
@@ -372,6 +380,13 @@ export class SessionManager {
     if (session.state === 'waiting_approval') {
       this.setState(session, 'running', store);
     }
+  }
+
+  /** Whether this session should keep its AI-tool process resident across
+   *  turns (stdin stays open). Requires the global flag AND an adapter that
+   *  speaks a streaming multi-turn stdin protocol (claude/codebuddy). */
+  private isResident(adapter: ReturnType<typeof getAdapter>): boolean {
+    return config.residentProcess && !!adapter?.supportsResidentStdin;
   }
 
   input(session: Session, text: string, store: Store): void {
@@ -388,39 +403,66 @@ export class SessionManager {
       payload: JSON.stringify({ text }),
       turn_id: session.currentTurnId,
       created_at: Date.now(),
+      source: 'app',
+      external_turn_ref: null,
     });
     this.setState(session, 'running', store);
 
-    // Each turn spawns a fresh AI-tool process. claude/codebuddy in
-    // stream-json mode read one user message from stdin, process it,
-    // then exit on EOF — so we write the prompt and close stdin to
-    // signal "turn done". codex exec is per-turn by design. On the
-    // second-and-later turns we pass --resume <externalSessionId> so
-    // the tool rehydrates its own conversation state.
-    this.spawnProcess(session, store);
-    const stdin = session.proc?.stdin;
-    if (stdin) {
+    const resident = this.isResident(adapter);
+    const alive = !!session.proc && !!session.proc.stdin && !session.proc.stdin.destroyed;
+
+    // Resident model (claude/codebuddy): reuse the live process and just write
+    // the next user message to its still-open stdin — no cold start, and the
+    // approval gate can write decisions back mid-turn. Spawn only if there is
+    // no live process yet (first turn, or after a crash → --resume).
+    if (resident && alive) {
+      const stdin = session.proc!.stdin!;
       try {
         stdin.write(adapter.encodeInput(text));
-        stdin.end();
+        // NOTE: no stdin.end() — the process stays resident for the next turn.
       } catch {
-        // stdin closed mid-write — non-fatal, process close will fire
+        // Write raced with process exit — respawn and retry once.
+        this.spawnProcess(session, store);
+        this.writeInitialInput(session, adapter, text, resident);
       }
+      return;
+    }
+
+    // No live process: spawn (with --resume if this session has run before)
+    // then write the first prompt. In one-shot mode (codex, or resident
+    // disabled) we close stdin to signal end-of-input for this turn.
+    this.spawnProcess(session, store);
+    this.writeInitialInput(session, adapter, text, resident);
+  }
+
+  private writeInitialInput(
+    session: Session,
+    adapter: NonNullable<ReturnType<typeof getAdapter>>,
+    text: string,
+    resident: boolean,
+  ): void {
+    const stdin = session.proc?.stdin;
+    if (!stdin) return;
+    try {
+      stdin.write(adapter.encodeInput(text));
+      // One-shot tools (codex exec) read a single prompt then run to
+      // completion on EOF. Resident tools keep stdin open for the next turn.
+      if (!resident) stdin.end();
+    } catch {
+      // stdin closed mid-write — non-fatal, process close will fire.
     }
   }
 
   interrupt(session: Session): void {
-    const adapter = getAdapter(session.toolId);
-    try {
-      adapter?.interrupt({ tmuxName: session.tmuxName });
-    } catch {
-      // ignore — SIGINT below is the real interrupt
-    }
+    // SIGINT is the real interrupt. This cancels the current turn; the
+    // structured tools exit on SIGINT and the next input() re-spawns with
+    // --resume, picking the conversation back up. (The old tmux send-keys
+    // path was a no-op in practice — we don't run tools inside tmux.)
     if (session.proc?.pid) {
       try {
         process.kill(session.proc.pid, 'SIGINT');
       } catch {
-        // ignore
+        // ignore — process may have already exited
       }
     }
   }

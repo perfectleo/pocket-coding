@@ -49,6 +49,14 @@ export const config = {
   scrollbackBytes: Number(env('POCKET_SCROLLBACK_BYTES', String(256 * 1024))),
   workspacesDir: env('POCKET_WORKSPACES_DIR', process.cwd()),
   approvalTimeoutMs: Number(env('POCKET_APPROVAL_TIMEOUT_MS', String(60 * 1000))),
+  // M2: keep the structured AI-tool process resident across turns (stdin
+  // stays open) instead of spawning a one-shot process per turn. This is what
+  // makes real-time approval write-back work and avoids per-turn cold starts.
+  // Only applies to adapters that support a streaming multi-turn stdin
+  // protocol (claude/codebuddy). codex `exec` is per-turn by design and always
+  // spawns fresh. Set POCKET_RESIDENT_PROCESS=false to fall back to the old
+  // one-shot behavior if a CLI regression breaks streaming stdin.
+  residentProcess: env('POCKET_RESIDENT_PROCESS', 'true') === 'true',
   push: {
     apnsTeamId: env('POCKET_APNS_TEAM_ID', ''),
     apnsKeyId: env('POCKET_APNS_KEY_ID', ''),

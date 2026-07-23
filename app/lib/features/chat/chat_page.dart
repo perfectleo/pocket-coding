@@ -331,6 +331,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   t: t,
                   controller: _inputCtl,
                   running: running,
+                  toolId: chat.toolId ?? '',
                   onSend: (text) {
                     ref.read(chatStateProvider(widget.sessionId).notifier).send(text);
                     _inputCtl.clear();
@@ -1585,12 +1586,14 @@ class _InputBar extends StatefulWidget {
   final bool running;
   final ValueChanged<String> onSend;
   final VoidCallback onInterrupt;
+  final String toolId;
   const _InputBar({
     required this.t,
     required this.controller,
     required this.running,
     required this.onSend,
     required this.onInterrupt,
+    required this.toolId,
   });
 
   @override
@@ -1601,11 +1604,19 @@ class _InputBarState extends State<_InputBar> {
   final SpeechToText _speech = SpeechToText();
   bool _speechAvailable = false;
   bool _listening = false;
+  List<SlashCommand> _suggestions = const [];
 
   @override
   void initState() {
     super.initState();
+    widget.controller.addListener(_onInputChanged);
     _initSpeech();
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onInputChanged);
+    super.dispose();
   }
 
   Future<void> _initSpeech() async {
@@ -1663,6 +1674,85 @@ class _InputBarState extends State<_InputBar> {
     );
   }
 
+  // --- slash-command autocomplete -----------------------------------------
+  // When the input starts with '/' and has no space yet, show filtered
+  // built-in commands for the active tool above the input bar. Tapping a
+  // candidate fills '/cmd ' so the user can append args or send directly.
+  void _onInputChanged() {
+    final text = widget.controller.text;
+    if (text.startsWith('/') && !text.contains(' ')) {
+      final q = text.toLowerCase();
+      final filtered = slashCommandsForTool(widget.toolId)
+          .where((c) => c.name.toLowerCase().startsWith(q))
+          .toList();
+      if (!_sameSlash(filtered, _suggestions)) {
+        setState(() => _suggestions = filtered);
+      }
+    } else if (_suggestions.isNotEmpty) {
+      setState(() => _suggestions = const []);
+    }
+  }
+
+  bool _sameSlash(List<SlashCommand> a, List<SlashCommand> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].name != b[i].name) return false;
+    }
+    return true;
+  }
+
+  void _pickSlash(SlashCommand cmd) {
+    widget.controller.text = '${cmd.name} ';
+    widget.controller.selection = TextSelection.fromPosition(
+      TextPosition(offset: widget.controller.text.length),
+    );
+    setState(() => _suggestions = const []);
+  }
+
+  Widget _slashSuggestionsView() {
+    final t = widget.t;
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 240),
+      margin: const EdgeInsets.only(bottom: 6),
+      decoration: BoxDecoration(
+        color: t.card,
+        borderRadius: BorderRadius.circular(t.radius + 4),
+        border: Border.all(color: t.border, width: 0.5),
+      ),
+      child: ListView.separated(
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        itemCount: _suggestions.length,
+        separatorBuilder: (_, _) => Divider(height: 1, color: t.border),
+        itemBuilder: (context, i) {
+          final c = _suggestions[i];
+          return InkWell(
+            onTap: () => _pickSlash(c),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Text(c.name,
+                      style: TextStyle(
+                          color: t.accent,
+                          fontSize: 13,
+                          fontFamily: t.fontMono,
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(c.description,
+                        style: TextStyle(color: t.sub, fontSize: 12),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = widget.t;
@@ -1676,6 +1766,7 @@ class _InputBarState extends State<_InputBar> {
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
         child: Column(
           children: [
+            if (_suggestions.isNotEmpty) _slashSuggestionsView(),
             _quickRow(context),
             const SizedBox(height: 6),
             Row(
@@ -1770,7 +1861,15 @@ class _InputBarState extends State<_InputBar> {
   }
 
   Widget _quickRow(BuildContext context) {
-    final chips = ['/plan', '/fix', '/test', '/explain'];
+    // Quick prompt templates (NOT slash commands): the previous chips
+    // (`/plan` `/fix` `/test` `/explain`) were fed verbatim to the CLI, but
+    // those slash commands don't exist in claude-code (→ "Unknown command")
+    // and even real ones like `/model`/`/plan` fail with "not available in
+    // this environment" depending on account/CLI version. codex/codebuddy
+    // have different command sets too. Plain prompt templates work across
+    // every CLI and never fail — tapping fills the input, user appends
+    // details and sends.
+    final chips = ['解释这段代码', '写单元测试', '修复这个 bug', '规划实现步骤'];
     return SizedBox(
       height: 28,
       child: ListView.separated(

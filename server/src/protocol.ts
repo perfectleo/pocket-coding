@@ -51,6 +51,8 @@ export type ClientMessage =
   | { t: 'interrupt'; sessionId: string }
   | { t: 'resize'; sessionId: string; cols: number; rows: number }
   | { t: 'mode'; sessionId: string; mode?: PermissionMode }   // mode omitted => cycle; present => set directly
+  // Raw terminal byte stream from the app's terminal view to the pty (M3).
+  | { t: 'term'; sessionId: string; data: string }
   | { t: 'ping' };
 
 export type ServerMessage =
@@ -59,6 +61,9 @@ export type ServerMessage =
   | { seq: number; t: 'checkpoint'; sessionId: string; cpId: string; kind: 'created' }
   | { seq: number; t: 'preview'; sessionId: string; state: PreviewState; url?: string }
   | { seq: number; t: 'mode'; sessionId: string; mode: PermissionMode }
+  // Raw terminal byte stream from the pty to the app's terminal view (M3).
+  // Not persisted / not seq-tracked — transient bytes for live rendering.
+  | { seq: number; t: 'term'; sessionId: string; data: string }
   | { seq: number; t: 'error'; sessionId?: string; message: string }
   | { seq: number; t: 'pong' };
 
@@ -89,6 +94,11 @@ export interface ToolAdapter {
   id: ToolId;
   displayName: string;
   mode: 'structured' | 'pty';
+  // true if the tool speaks a streaming multi-turn stdin protocol so its
+  // process can stay resident across turns (stdin kept open) — enabling
+  // real-time approval write-back and no per-turn cold start. claude/codebuddy
+  // (stream-json input) = true; codex `exec` runs one turn per process = false.
+  supportsResidentStdin?: boolean;
   detect(): Promise<{ installed: boolean; version?: string }>;
   buildCommand(opts: LaunchOptions): { cmd: string; args: string[]; env: Record<string, string> };
   parseJsonLine?(line: string): AgentEvent[];
@@ -138,11 +148,36 @@ export interface SessionSummary {
   lastSeq: number;
   createdAt: number;
   lastMessage?: string;
+  // The AI tool's own session ID. Exposed so the user can continue the
+  // same conversation from a desktop terminal (`claude --resume <id>` etc.).
+  externalSessionId?: string;
+  // The working directory this session runs in — needed to build the
+  // desktop `--resume` command and to correlate with host session files.
+  cwd?: string;
 }
 
 export interface SessionDetail extends SessionSummary {
   tmuxName: string;
   baselineRef?: string;
+  // A ready-to-copy shell command that resumes this conversation from the
+  // desktop CLI (built per-tool from externalSessionId).
+  resumeCommand?: string;
+}
+
+// A session discovered on the host by scanning the AI tools' own session
+// files (~/.claude/projects, ~/.codex/sessions). Used to let the app import
+// and continue a conversation that was started from the desktop terminal.
+export interface HostSession {
+  toolId: ToolId;
+  externalSessionId: string;
+  cwd: string;
+  updatedAt: number;
+  messageCount: number;
+  summary: string;
+  // Absolute path to the underlying session file (for import/backfill).
+  filePath: string;
+  // true if this externalSessionId is already tracked by a local session row.
+  imported?: boolean;
 }
 
 export interface MessageRecord {
@@ -154,6 +189,24 @@ export interface MessageRecord {
   payload: unknown;
   turnId?: string;
   createdAt: number;
+  // Where this message originated: 'app' (produced live in Pocket) or
+  // 'external' (backfilled from the tool's own session file, i.e. a turn
+  // that happened in the desktop terminal). Absent = legacy 'app'.
+  source?: 'app' | 'external';
+}
+
+// Build the desktop shell command that resumes an AI tool conversation by
+// its own session ID, so the app can show a copy-paste "continue on desktop"
+// hint. Kept here (shared protocol module) so app and server agree on syntax.
+export function buildResumeCommand(toolId: ToolId, externalSessionId: string): string {
+  switch (toolId) {
+    case 'claude-code':
+      return `claude --resume ${externalSessionId}`;
+    case 'codex':
+      return `codex exec resume ${externalSessionId}`;
+    case 'codebuddy':
+      return `codebuddy --resume=${externalSessionId}`;
+  }
 }
 
 export interface DiffHunk {

@@ -12,10 +12,13 @@ import { detectAllTools } from '../adapters/index.js';
 import { sessionManager } from '../session/manager.js';
 import * as checkpoint from '../checkpoint/index.js';
 import { z } from 'zod';
-import { newId } from './auth.js';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, normalize, relative, isAbsolute, resolve, sep } from 'node:path';
+import { newId, newSessionId } from './auth.js';
+import { mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, normalize, relative, isAbsolute, resolve, sep, basename } from 'node:path';
 import { previewManager } from '../preview/manager.js';
+import { buildResumeCommand, type ToolId } from '../protocol.js';
+import { scanHostSessions } from '../hosts/session-scanner.js';
+import { backfillSession, reconcileSession } from '../hosts/backfill.js';
 
 const pairSchema = z.object({
   code: z.string().regex(/^\d{6}$/),
@@ -93,6 +96,79 @@ export async function buildHttpServer(): Promise<FastifyInstance> {
     return { tools: await detectAllTools() };
   });
 
+  // ---------- host session discovery / import (M1.2 / M1.3) ----------
+
+  // List conversations the user started from the desktop terminal by scanning
+  // the AI tools' own session files. Optional ?tool= and ?cwd= filters.
+  app.get('/api/hosts/sessions', async (req) => {
+    const q = req.query as { tool?: string; cwd?: string } | undefined;
+    const tool = q?.tool as ToolId | undefined;
+    const found = scanHostSessions({ tool, cwd: q?.cwd });
+    // Flag sessions already tracked locally so the app can show "imported".
+    const sessions = found.map((s) => ({
+      ...s,
+      imported: !!store.getSessionByExternalId(s.externalSessionId),
+    }));
+    return { sessions };
+  });
+
+  const importSchema = z.object({
+    toolId: z.enum(['claude-code', 'codex', 'codebuddy']),
+    externalSessionId: z.string().min(1),
+    cwd: z.string().min(1),
+    projectId: z.string().optional(),
+  });
+
+  // Import a desktop session into Pocket: create a local session row bound to
+  // the tool's externalSessionId and backfill its history from the transcript.
+  app.post('/api/hosts/sessions/import', async (req, reply) => {
+    const parsed = importSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'bad_request', details: parsed.error.flatten() });
+    const { toolId, externalSessionId, cwd, projectId } = parsed.data;
+
+    // Idempotent: if this external session is already tracked, return it.
+    const existing = store.getSessionByExternalId(externalSessionId);
+    if (existing) {
+      const imported = reconcileSession(store, existing);
+      return { id: existing.id, alreadyImported: true, backfilled: imported?.imported ?? 0 };
+    }
+
+    const id = newSessionId();
+    const now = Date.now();
+    try {
+      mkdirSync(cwd, { recursive: true });
+    } catch {
+      /* dir may already exist */
+    }
+    store.createSession({
+      id,
+      project_id: projectId || basename(cwd) || 'imported',
+      tool_id: toolId,
+      model: null,
+      state: 'idle',
+      tmux_name: `pocket-${id}`,
+      last_seq: 0,
+      baseline_ref: null,
+      created_at: now,
+      cwd,
+      external_session_id: externalSessionId,
+      // Mark as already-run so the next input re-spawns with --resume rather
+      // than starting a fresh conversation.
+      has_run_once: 1,
+      permission_mode: 'default',
+    });
+    store.audit(id, 'session_import', externalSessionId, JSON.stringify({ toolId, cwd }));
+
+    let backfilled = 0;
+    try {
+      const res = backfillSession(store, { sessionId: id, toolId, externalSessionId });
+      backfilled = res?.imported ?? 0;
+    } catch {
+      /* transcript parse failure: session still usable, just no history */
+    }
+    return { id, alreadyImported: false, backfilled };
+  });
+
   // ---------- workspace root browsing ----------
   // The server's launch CWD is the "root" users browse to pick a project
   // folder for a new session. We never allow escaping the root via '..'.
@@ -137,9 +213,39 @@ export async function buildHttpServer(): Promise<FastifyInstance> {
         lastSeq: r.last_seq,
         createdAt: r.created_at,
         lastMessage: lastMsg ? (JSON.parse(lastMsg.payload) as { text?: string }).text : undefined,
+        // Exposed so the app can offer "continue on desktop" (M1.1).
+        externalSessionId: r.external_session_id ?? undefined,
+        cwd: r.cwd ?? undefined,
       };
     });
     return { sessions: out };
+  });
+
+  // Single-session detail — includes the ready-to-copy desktop resume command
+  // so the user can pick up the same conversation from their terminal (M1.1).
+  app.get('/api/sessions/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const r = store.getSession(id);
+    if (!r) return reply.code(404).send({ error: 'not_found' });
+    const inMem = sessionManager.get(r.id);
+    const externalSessionId = r.external_session_id ?? undefined;
+    return {
+      id: r.id,
+      projectId: r.project_id,
+      toolId: r.tool_id,
+      model: r.model ?? undefined,
+      state: inMem?.state ?? (r.state as string),
+      permissionMode: inMem?.permissionMode ?? (r.permission_mode as string | null) ?? 'default',
+      lastSeq: r.last_seq,
+      createdAt: r.created_at,
+      tmuxName: r.tmux_name,
+      baselineRef: r.baseline_ref ?? undefined,
+      externalSessionId,
+      cwd: r.cwd ?? undefined,
+      resumeCommand: externalSessionId
+        ? buildResumeCommand(r.tool_id as ToolId, externalSessionId)
+        : undefined,
+    };
   });
 
   app.post('/api/sessions', async (req, reply) => {
@@ -177,6 +283,17 @@ export async function buildHttpServer(): Promise<FastifyInstance> {
   app.get('/api/sessions/:id/messages', async (req, reply) => {
     const { id } = req.params as { id: string };
     const afterSeq = Number((req.query as { after?: string }).after ?? -1);
+    // Reconcile with the tool's own session file first so turns that happened
+    // in the desktop terminal show up here too (single source of truth, M1.4).
+    // Best-effort: a missing/locked transcript must not break message fetch.
+    const row = store.getSession(id);
+    if (row?.external_session_id) {
+      try {
+        reconcileSession(store, row);
+      } catch {
+        /* non-fatal: fall back to whatever SQLite already has */
+      }
+    }
     const rows = store.listMessages(id, afterSeq);
     return {
       messages: rows.map((r) => ({
@@ -188,6 +305,7 @@ export async function buildHttpServer(): Promise<FastifyInstance> {
         payload: JSON.parse(r.payload),
         turnId: r.turn_id ?? undefined,
         createdAt: r.created_at,
+        source: r.source ?? 'app',
       })),
     };
   });

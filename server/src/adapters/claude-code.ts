@@ -170,6 +170,9 @@ export const claudeCodeAdapter: ToolAdapter = {
   id: 'claude-code',
   displayName: 'Claude Code',
   mode: 'structured',
+  // stream-json input reads newline-delimited user messages until EOF, so the
+  // process can stay resident across turns (M2).
+  supportsResidentStdin: true,
 
   async detect() {
     return detectClaude();

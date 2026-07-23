@@ -145,6 +145,10 @@ export const codexAdapter: ToolAdapter = {
   id: 'codex',
   displayName: 'Codex',
   mode: 'structured',
+  // codex `exec` runs exactly one turn per invocation (resume via
+  // `exec resume <id>`), so its process cannot stay resident — always
+  // spawn fresh per turn.
+  supportsResidentStdin: false,
 
   async detect() {
     return detectCodex();

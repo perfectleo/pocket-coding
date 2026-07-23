@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api/client.dart';
@@ -26,6 +27,11 @@ class HomePage extends ConsumerWidget {
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         actions: [
+          IconButton(
+            icon: Icon(Icons.download_outlined, color: t.sub),
+            tooltip: '导入电脑会话',
+            onPressed: () => _showHostSessionsSheet(context, ref, t),
+          ),
           IconButton(
             icon: Icon(Icons.refresh, color: t.sub),
             tooltip: '刷新',
@@ -112,6 +118,18 @@ class HomePage extends ConsumerWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(t.radius + 4)),
       ),
       builder: (ctx) => const _NewSessionSheet(),
+    );
+  }
+
+  void _showHostSessionsSheet(BuildContext context, WidgetRef ref, PocketTheme t) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: t.card,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(t.radius + 4)),
+      ),
+      builder: (ctx) => const _HostSessionsSheet(),
     );
   }
 
@@ -271,6 +289,21 @@ class _SessionTile extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              leading: Icon(Icons.terminal, color: t.foreground),
+              title: Text('在电脑继续', style: TextStyle(color: t.foreground)),
+              subtitle: Text(
+                session.resumeCommand() ?? '首轮对话后可用',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: t.sub, fontSize: 11, fontFamily: t.fontMono),
+              ),
+              enabled: session.resumeCommand() != null,
+              onTap: () {
+                Navigator.pop(ctx);
+                _showResumeCommand(context, t);
+              },
+            ),
+            ListTile(
               leading: Icon(Icons.delete_outline, color: t.danger),
               title: Text('删除会话', style: TextStyle(color: t.danger)),
               onTap: () {
@@ -280,6 +313,71 @@ class _SessionTile extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showResumeCommand(BuildContext context, PocketTheme t) {
+    final cmd = session.resumeCommand();
+    if (cmd == null) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: t.card,
+        title: Text('在电脑继续', style: TextStyle(color: t.foreground, fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '在电脑终端运行以下命令，即可用命令行继续这个会话：',
+              style: TextStyle(color: t.sub, fontSize: 13, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: t.cardAlt,
+                borderRadius: BorderRadius.circular(t.radius),
+                border: Border.all(color: t.border),
+              ),
+              child: SelectableText(
+                cmd,
+                style: TextStyle(color: t.foreground, fontSize: 13, fontFamily: t.fontMono),
+              ),
+            ),
+            if (session.cwd != null && session.cwd!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                '目录：${session.cwd}',
+                style: TextStyle(color: t.sub, fontSize: 11, fontFamily: t.fontMono),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('关闭', style: TextStyle(color: t.sub)),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: t.accent,
+              foregroundColor: t.accentForeground,
+            ),
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: cmd));
+              if (!ctx.mounted) return;
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('命令已复制')),
+              );
+            },
+            icon: const Icon(Icons.copy, size: 16),
+            label: const Text('复制'),
+          ),
+        ],
       ),
     );
   }
@@ -754,5 +852,235 @@ class _FolderPickerDialogState extends State<_FolderPickerDialog> {
         ),
       ],
     );
+  }
+}
+
+/// Lists conversations discovered on the host (the AI tools' own session
+/// files) so the user can import one and continue it inside Pocket. Sessions
+/// already imported are marked and tapping them just re-opens the local copy.
+class _HostSessionsSheet extends ConsumerStatefulWidget {
+  const _HostSessionsSheet();
+  @override
+  ConsumerState<_HostSessionsSheet> createState() => _HostSessionsSheetState();
+}
+
+class _HostSessionsSheetState extends ConsumerState<_HostSessionsSheet> {
+  List<HostSession> _sessions = const [];
+  bool _loading = true;
+  String? _error;
+  String? _importingRef;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final api = ref.read(apiClientProvider);
+    if (api == null) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final list = await api.listHostSessions();
+      if (!mounted) return;
+      setState(() {
+        _sessions = list;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '$e';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _import(HostSession s) async {
+    final api = ref.read(apiClientProvider);
+    if (api == null) return;
+    setState(() => _importingRef = s.externalSessionId);
+    try {
+      final res = await api.importHostSession(
+        toolId: s.toolId,
+        externalSessionId: s.externalSessionId,
+        cwd: s.cwd,
+      );
+      if (!mounted) return;
+      ref.invalidate(sessionsProvider);
+      Navigator.pop(context);
+      context.go('/chat/${res.id}');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _importingRef = null);
+      final t = ref.read(themeProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导入失败：$e'), backgroundColor: t.danger),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ref.watch(themeProvider);
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.7,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 12, bottom: 12),
+                  decoration: BoxDecoration(
+                    color: t.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '导入电脑会话',
+                        style: TextStyle(
+                          color: t.foreground,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.refresh, color: t.sub, size: 20),
+                      tooltip: '刷新',
+                      onPressed: _loading ? null : _load,
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  '这里列出你在电脑命令行里用 Claude Code / Codex / CodeBuddy 开启的会话，导入后可在手机上继续。',
+                  style: TextStyle(color: t.sub, fontSize: 12, height: 1.5),
+                ),
+              ),
+              Flexible(child: _body(t)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _body(PocketTheme t) {
+    if (_loading) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Center(child: CircularProgressIndicator(color: t.accent, strokeWidth: 2)),
+      );
+    }
+    if (_error != null) {
+      return Padding(
+        padding: const EdgeInsets.all(32),
+        child: Text('加载失败：$_error',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: t.danger, fontSize: 13)),
+      );
+    }
+    if (_sessions.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(32),
+        child: Text('没有发现电脑会话',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: t.sub, fontSize: 13)),
+      );
+    }
+    return ListView.separated(
+      shrinkWrap: true,
+      padding: const EdgeInsets.only(bottom: 12),
+      itemCount: _sessions.length,
+      separatorBuilder: (_, _) => Divider(height: 1, color: t.border, indent: 16, endIndent: 16),
+      itemBuilder: (ctx, i) => _tile(t, _sessions[i]),
+    );
+  }
+
+  Widget _tile(PocketTheme t, HostSession s) {
+    final importing = _importingRef == s.externalSessionId;
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: t.cardAlt,
+          borderRadius: BorderRadius.circular(t.radius),
+        ),
+        alignment: Alignment.center,
+        child: Icon(_toolIcon(s.toolId), color: t.accent, size: 20),
+      ),
+      title: Text(
+        s.summary.isEmpty ? '（无摘要）' : s.summary,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: t.foreground, fontSize: 14, fontWeight: FontWeight.w600),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 2),
+          Text(
+            '${_toolLabel(s.toolId)} · ${s.messageCount} 条消息',
+            style: TextStyle(color: t.sub, fontSize: 11, fontFamily: t.fontMono),
+          ),
+          if (s.cwd.isNotEmpty)
+            Text(
+              s.cwd,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: t.sub, fontSize: 11, fontFamily: t.fontMono),
+            ),
+        ],
+      ),
+      trailing: importing
+          ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: t.accent))
+          : s.imported
+              ? Text('已导入', style: TextStyle(color: t.accent, fontSize: 11, fontWeight: FontWeight.w600))
+              : Icon(Icons.download_outlined, color: t.sub, size: 20),
+      onTap: importing ? null : () => _import(s),
+    );
+  }
+
+  IconData _toolIcon(String toolId) {
+    switch (toolId) {
+      case 'claude-code':
+      case 'codebuddy':
+        return Icons.smart_toy_outlined;
+      default:
+        return Icons.code;
+    }
+  }
+
+  String _toolLabel(String toolId) {
+    switch (toolId) {
+      case 'claude-code':
+        return 'claude';
+      case 'codebuddy':
+        return 'codebuddy';
+      default:
+        return 'codex';
+    }
   }
 }
