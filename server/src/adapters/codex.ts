@@ -217,7 +217,6 @@ export const codexAdapter: ToolAdapter = {
   // whatever the user requested — that's correct because we set the flag
   // ourselves and codex has no way to change it mid-turn.
 
-
   buildTerminalCommand() {
     return null; // codex exec is non-interactive; no TUI to attach.
   },
