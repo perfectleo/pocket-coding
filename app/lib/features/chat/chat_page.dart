@@ -63,6 +63,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     });
   }
 
+  /// Whether the terminal entry should be enabled: the tool must have an
+  /// interactive TUI (codex exec has none) and must have captured an
+  /// externalSessionId so the pty can --resume and share context.
+  bool _canTerminal(ChatState chat) =>
+      chat.toolId != 'codex' && chat.externalSessionId != null;
+
   /// Open the interactive pty terminal for this session. Wires TerminalPage's
   /// injected callbacks/stream to the WS term channel: keystrokes/resize go
   /// out via WsClient, and incoming { t:'term' } bytes are filtered from the
@@ -260,16 +266,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           // captured an externalSessionId (so the TUI can --resume and share
           // context) and the tool actually has an interactive TUI (codex exec
           // has none). Otherwise disabled with an explanatory tooltip.
-          Builder(builder: (_) {
-            final canTerminal =
-                chat.toolId != 'codex' && chat.externalSessionId != null;
-            return IconButton(
-              icon: Icon(Icons.terminal,
-                  color: canTerminal ? t.foreground : t.sub.withValues(alpha: 0.4)),
-              tooltip: canTerminal ? '终端' : '先发一条消息再打开终端',
-              onPressed: canTerminal ? () => _openTerminal(chat) : null,
-            );
-          }),
+          IconButton(
+            icon: Icon(Icons.terminal,
+                color: _canTerminal(chat) ? t.foreground : t.sub.withValues(alpha: 0.4)),
+            tooltip: _canTerminal(chat) ? '终端' : '先发一条消息再打开终端',
+            onPressed: _canTerminal(chat) ? () => _openTerminal(chat) : null,
+          ),
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert, color: t.sub),
             color: t.card,
