@@ -15,6 +15,7 @@ import { getAdapter } from '../adapters/index.js';
 import { Scrollback } from './scrollback.js';
 import * as checkpoint from '../checkpoint/index.js';
 import { PushManager } from '../push/manager.js';
+import { terminalManager } from './terminal.js';
 
 export interface Session {
   id: string;
@@ -467,6 +468,61 @@ export class SessionManager {
     }
   }
 
+  /**
+   * Open the interactive pty terminal channel for a session. Kills the
+   * structured resident process first so only one process holds the
+   * conversation (they share externalSessionId via --resume). Terminal output
+   * bytes are broadcast to subscribers as { t:'term' } (transient, not
+   * persisted, not seq-tracked). Returns false if the tool has no TUI.
+   */
+  openTerminal(session: Session, store: Store): boolean {
+    const adapter = getAdapter(session.toolId);
+    if (!adapter?.buildTerminalCommand) return false;
+    const spec = adapter.buildTerminalCommand({
+      cwd: session.cwd,
+      externalSessionId: session.externalSessionId,
+    });
+    if (!spec) return false;
+
+    // Single-writer rule: stop the structured process before the TUI resumes
+    // the same conversation. It will --resume again on the next input().
+    if (session.proc) {
+      try { session.proc.kill('SIGINT'); } catch { /* already dead */ }
+      session.proc = null;
+    }
+
+    terminalManager.open({
+      sessionId: session.id,
+      cmd: spec.cmd,
+      args: spec.args,
+      cwd: session.cwd,
+      env: spec.env,
+      onData: (data) => {
+        const msg: ServerMessage = { seq: 0, t: 'term', sessionId: session.id, data };
+        for (const sub of session.subscribers) sub(msg);
+      },
+      onExit: (code) => {
+        const msg: ServerMessage = { seq: 0, t: 'term_exit', sessionId: session.id, code };
+        for (const sub of session.subscribers) sub(msg);
+      },
+    });
+    store.audit(session.id, 'term_open', session.toolId);
+    return true;
+  }
+
+  writeTerminal(session: Session, data: string): void {
+    terminalManager.write(session.id, data);
+  }
+
+  resizeTerminal(session: Session, cols: number, rows: number): void {
+    terminalManager.resize(session.id, cols, rows);
+  }
+
+  closeTerminal(session: Session, store: Store): void {
+    terminalManager.close(session.id);
+    store.audit(session.id, 'term_close', session.toolId);
+  }
+
   /** Cycle the permission mode forward (shift+tab equivalent). Takes effect
    *  on the next spawned process — claude/codebuddy re-launch with the new
    *  --permission-mode flag, codex with a new --sandbox value. We broadcast
@@ -595,6 +651,8 @@ export class SessionManager {
       try { session.proc.kill('SIGTERM'); } catch { /* already dead */ }
       session.proc = null;
     }
+    // Tear down any live pty terminal channel too, or it leaks.
+    terminalManager.close(session.id);
     this.sessions.delete(session.id);
     store.deleteSessionCascade(session.id);
     store.audit(null, 'session_delete', session.id);

@@ -134,8 +134,34 @@ async function handleClient(ws: WebSocket, msg: ClientMessage, store: Store): Pr
       }
       return;
     }
+    case 'term_open': {
+      // Open the interactive pty terminal channel. Rehydrate from DB if the
+      // session isn't in memory (server restart) so the terminal can --resume.
+      let session = sessionManager.get(msg.sessionId);
+      if (!session) {
+        const row = store.getSession(msg.sessionId);
+        if (!row) return send(ws, { seq: 0, t: 'error', sessionId: msg.sessionId, message: 'session_not_found' });
+        session = sessionManager.rehydrate(row, store);
+      }
+      const ok = sessionManager.openTerminal(session, store);
+      if (!ok) send(ws, { seq: 0, t: 'error', sessionId: msg.sessionId, message: 'terminal_unsupported' });
+      return;
+    }
+    case 'term': {
+      // Raw keystrokes from the app's terminal view → pty stdin.
+      const session = sessionManager.get(msg.sessionId);
+      if (session) sessionManager.writeTerminal(session, msg.data);
+      return;
+    }
     case 'resize': {
-      // tmux resize — best effort
+      // Terminal geometry change → resize the pty (best effort).
+      const session = sessionManager.get(msg.sessionId);
+      if (session) sessionManager.resizeTerminal(session, msg.cols, msg.rows);
+      return;
+    }
+    case 'term_close': {
+      const session = sessionManager.get(msg.sessionId);
+      if (session) sessionManager.closeTerminal(session, store);
       return;
     }
   }
