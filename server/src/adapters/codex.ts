@@ -218,6 +218,10 @@ export const codexAdapter: ToolAdapter = {
   // ourselves and codex has no way to change it mid-turn.
 
 
+  buildTerminalCommand() {
+    return null; // codex exec is non-interactive; no TUI to attach.
+  },
+
   interrupt(session: { tmuxName: string }): void {
     if (session.tmuxName) {
       try {

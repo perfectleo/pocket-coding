@@ -1,0 +1,21 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { claudeCodeAdapter } from '../src/adapters/claude-code.js';
+import { codexAdapter } from '../src/adapters/codex.js';
+
+test('claude buildTerminalCommand: no resume when externalSessionId absent', () => {
+  const c = claudeCodeAdapter.buildTerminalCommand!({ cwd: '/tmp', externalSessionId: null });
+  assert.equal(c!.cmd, 'claude');
+  assert.ok(!c!.args.includes('--resume'));
+  assert.ok(!c!.args.includes('--input-format')); // interactive, NOT stream-json
+});
+
+test('claude buildTerminalCommand: resumes when externalSessionId present', () => {
+  const c = claudeCodeAdapter.buildTerminalCommand!({ cwd: '/tmp', externalSessionId: 'sess-123' });
+  assert.deepEqual(c!.args, ['--resume', 'sess-123']);
+});
+
+test('codex buildTerminalCommand: not supported → null', () => {
+  const c = codexAdapter.buildTerminalCommand?.({ cwd: '/tmp', externalSessionId: null });
+  assert.equal(c ?? null, null);
+});

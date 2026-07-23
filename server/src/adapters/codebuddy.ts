@@ -63,6 +63,13 @@ export const codebuddyAdapter: ToolAdapter = {
   encodeApproval: claudeCodeAdapter.encodeApproval,
   extractSessionId: claudeCodeAdapter.extractSessionId,
   extractPermissionMode: claudeCodeAdapter.extractPermissionMode,
+
+  buildTerminalCommand(opts: { cwd: string; externalSessionId: string | null }) {
+    const args: string[] = [];
+    if (opts.externalSessionId) args.push(`--resume=${opts.externalSessionId}`);
+    return { cmd: 'codebuddy', args, env: {} };
+  },
+
   interrupt: claudeCodeAdapter.interrupt,
 };
 

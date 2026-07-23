@@ -265,6 +265,12 @@ export const claudeCodeAdapter: ToolAdapter = {
     return null;
   },
 
+  buildTerminalCommand(opts: { cwd: string; externalSessionId: string | null }) {
+    const args: string[] = [];
+    if (opts.externalSessionId) args.push('--resume', opts.externalSessionId);
+    return { cmd: 'claude', args, env: {} };
+  },
+
   interrupt(session: { tmuxName: string }): void {
     // Send Ctrl+C to the tmux pane (best effort — tmux may be absent in dev).
     if (session.tmuxName) {

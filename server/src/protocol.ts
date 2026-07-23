@@ -115,6 +115,15 @@ export interface ToolAdapter {
   // The captured mode is broadcast to the app so its mode chip reflects the
   // tool's actual state rather than what we last requested.
   extractPermissionMode?(line: string): PermissionMode | null;
+  // Build the command to launch the tool's INTERACTIVE TUI inside a pty
+  // (M3 terminal channel). Unlike buildCommand (stream-json), this uses no
+  // --input-format so slash commands work exactly like the desktop. Returns
+  // null for tools without an interactive resume mode (codex exec). When
+  // externalSessionId is set, resume that conversation so the terminal shares
+  // context with the structured channel.
+  buildTerminalCommand?(opts: { cwd: string; externalSessionId: string | null }):
+    | { cmd: string; args: string[]; env: Record<string, string> }
+    | null;
   interrupt(session: { tmuxName: string }): void;
 }
 
