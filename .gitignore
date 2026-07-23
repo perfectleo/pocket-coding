@@ -1,0 +1,27 @@
+# ===== Dependencies =====
+**/node_modules/
+
+# ===== Build outputs =====
+server/dist/
+app/build/
+
+# ===== Runtime artifacts =====
+# pocket-coding shadow git (per-workspace checkpoint repo, runtime-generated)
+**/.pocket/
+
+# ===== Databases =====
+*.db
+*.sqlite
+*.sqlite3
+
+# ===== Logs =====
+*.log
+
+# ===== Env / secrets =====
+.env
+.env.*
+!.env.example
+
+# ===== OS / editor =====
+**/.DS_Store
+*.swp

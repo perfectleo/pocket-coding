@@ -73,13 +73,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   /// injected callbacks/stream to the WS term channel: keystrokes/resize go
   /// out via WsClient, and incoming { t:'term' } bytes are filtered from the
   /// shared event stream into the page's `incoming` stream.
-  void _openTerminal(ChatState chat) {
+  ///
+  /// [initialCommand] is auto-typed into the pty once the TUI boots — used to
+  /// run interactive-panel slash commands that the chat (stream-json) channel
+  /// rejects with "isn't available in this environment".
+  void _openTerminal(ChatState chat, {String? initialCommand}) {
     final ws = ref.read(wsClientProvider);
     if (ws == null) return;
     final sid = widget.sessionId;
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => TerminalPage(
         sessionId: sid,
+        initialCommand: initialCommand,
         onOpen: () => ws.termOpen(sid),
         onClose: () => ws.termClose(sid),
         onInput: (d) => ws.termData(sid, d),
@@ -89,6 +94,53 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             .map((m) => m.data ?? ''),
       ),
     ));
+  }
+
+  /// Interactive-panel ("local-jsx") slash commands. These open a TUI panel in
+  /// Claude Code and are hard-disabled over the non-interactive stream-json
+  /// chat channel (reply: "… isn't available in this environment."). They only
+  /// work in a real pty, so we route them into the terminal instead of the
+  /// chat channel. Names verified against the CLI binary's command table.
+  static const _interactiveSlashCommands = <String>{
+    '/model', '/memory', '/plan', '/config', '/permissions',
+    '/context', '/status', '/doctor', '/login', '/logout',
+    '/resume', '/export', '/add-dir', '/diff', '/help',
+  };
+
+  /// Handle a chat submission. Plain text and non-interactive slash commands
+  /// (/clear, /compact, /cost, …) go to the chat channel as before. Interactive
+  /// slash commands are transparently redirected into the pty terminal, where
+  /// they actually work, instead of failing silently in chat.
+  void _handleSend(ChatState chat, String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    final cmd = trimmed.split(RegExp(r'\s+')).first.toLowerCase();
+    if (_interactiveSlashCommands.contains(cmd)) {
+      _inputCtl.clear();
+      _runInteractiveInTerminal(chat, trimmed);
+      return;
+    }
+    ref.read(chatStateProvider(widget.sessionId).notifier).send(text);
+    _inputCtl.clear();
+  }
+
+  void _runInteractiveInTerminal(ChatState chat, String command) {
+    if (!_canTerminal(chat)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('“$command” 是交互命令，需在终端运行。先发送一条普通消息建立会话后再试。'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('“$command” 已在终端中运行（聊天通道不支持交互命令）'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    _openTerminal(chat, initialCommand: command);
   }
 
   @override
@@ -371,10 +423,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   controller: _inputCtl,
                   running: running,
                   toolId: chat.toolId ?? '',
-                  onSend: (text) {
-                    ref.read(chatStateProvider(widget.sessionId).notifier).send(text);
-                    _inputCtl.clear();
-                  },
+                  onSend: (text) => _handleSend(chat, text),
                   onInterrupt: () => ref.read(chatStateProvider(widget.sessionId).notifier).interrupt(),
                 ),
               ],

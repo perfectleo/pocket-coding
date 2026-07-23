@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/api/client.dart';
 import '../../core/protocol.dart';
 import '../../core/state/app_state.dart';
@@ -22,12 +23,56 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
   String? _pendingCode;
   List<ToolInfo> _tools = [];
 
+  static const _historyKey = 'hostHistory';
+  static const _historyMax = 10;
+  List<String> _hostHistory = [];
+  bool _showHistory = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
   @override
   void dispose() {
     _hostCtl.dispose();
     _codeCtl.dispose();
     _nameCtl.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() => _hostHistory = prefs.getStringList(_historyKey) ?? []);
+  }
+
+  /// Record a successfully used host, most-recent first, de-duplicated and
+  /// capped. Persisted so it survives restarts.
+  Future<void> _rememberHost(String host) async {
+    final h = host.trim();
+    if (h.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_historyKey) ?? [];
+    list.removeWhere((e) => e == h);
+    list.insert(0, h);
+    final capped = list.take(_historyMax).toList();
+    await prefs.setStringList(_historyKey, capped);
+    if (!mounted) return;
+    setState(() => _hostHistory = capped);
+  }
+
+  Future<void> _removeHost(String host) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_historyKey) ?? [];
+    list.removeWhere((e) => e == host);
+    await prefs.setStringList(_historyKey, list);
+    if (!mounted) return;
+    setState(() {
+      _hostHistory = list;
+      if (_hostHistory.isEmpty) _showHistory = false;
+    });
   }
 
   Future<void> _requestCode() async {
@@ -47,6 +92,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
     try {
       final api = ApiClient(baseUrl: baseUrl);
       final code = await api.requestPairCode();
+      await _rememberHost(host);
       setState(() {
         _pendingCode = code;
         _busy = false;
@@ -76,6 +122,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
             code: code,
             name: _nameCtl.text.trim(),
           );
+      await _rememberHost(host);
       if (mounted) context.go('/home');
     } catch (e) {
       setState(() {
@@ -156,7 +203,19 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
                           icon: Icons.cloud_outlined,
                           keyboardType: TextInputType.url,
                           onChanged: (_) => setState(() {}),
+                          suffix: _hostHistory.isEmpty
+                              ? null
+                              : IconButton(
+                                  icon: Icon(
+                                    _showHistory ? Icons.expand_less : Icons.history,
+                                    color: t.sub,
+                                    size: 18,
+                                  ),
+                                  tooltip: '历史地址',
+                                  onPressed: () => setState(() => _showHistory = !_showHistory),
+                                ),
                         ),
+                        if (_showHistory && _hostHistory.isNotEmpty) _historyPanel(t),
                         const SizedBox(height: 12),
                         Row(
                           children: [
@@ -312,6 +371,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
     required IconData icon,
     TextInputType? keyboardType,
     ValueChanged<String>? onChanged,
+    Widget? suffix,
   }) =>
       TextField(
         controller: controller,
@@ -322,6 +382,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
           hintText: hint,
           hintStyle: TextStyle(color: t.sub, fontSize: 13),
           prefixIcon: Icon(icon, color: t.sub, size: 18),
+          suffixIcon: suffix,
           filled: true,
           fillColor: t.inputFill,
           border: OutlineInputBorder(
@@ -337,6 +398,54 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
             borderSide: BorderSide(color: t.inputBorderFocus),
           ),
           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+        ),
+      );
+
+  Widget _historyPanel(PocketTheme t) => Container(
+        margin: const EdgeInsets.only(top: 6),
+        decoration: BoxDecoration(
+          color: t.inputFill,
+          borderRadius: BorderRadius.circular(t.radius),
+          border: Border.all(color: t.inputBorder),
+        ),
+        child: Column(
+          children: [
+            for (var i = 0; i < _hostHistory.length; i++) ...[
+              if (i > 0) Divider(height: 1, color: t.border),
+              InkWell(
+                onTap: () {
+                  _hostCtl.text = _hostHistory[i];
+                  setState(() => _showHistory = false);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 12, right: 4, top: 4, bottom: 4),
+                  child: Row(
+                    children: [
+                      Icon(Icons.history, size: 15, color: t.sub),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _hostHistory[i],
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: t.foreground,
+                            fontSize: 13,
+                            fontFamily: t.fontMono,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close, size: 16, color: t.sub),
+                        tooltip: '删除',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _removeHost(_hostHistory[i]),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       );
 
