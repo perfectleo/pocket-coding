@@ -147,6 +147,9 @@ async function handleClient(ws: WebSocket, msg: ClientMessage, store: Store): Pr
       if (!ok) send(ws, { seq: 0, t: 'error', sessionId: msg.sessionId, message: 'terminal_unsupported' });
       return;
     }
+    // term / resize / term_close only act on a live pty, which exists solely
+    // in memory. Unlike term_open we don't rehydrate here: writing to, resizing
+    // or closing a terminal that isn't open is a no-op by design.
     case 'term': {
       // Raw keystrokes from the app's terminal view → pty stdin.
       const session = sessionManager.get(msg.sessionId);
