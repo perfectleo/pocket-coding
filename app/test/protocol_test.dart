@@ -84,6 +84,18 @@ void main() {
       expect(m.source, 'external');
     });
 
+    test('ServerMessage parses term data', () {
+      final m = ServerMessage.fromJson({'seq': 0, 't': 'term', 'sessionId': 's1', 'data': 'abc'});
+      expect(m.t, 'term');
+      expect(m.data, 'abc');
+    });
+
+    test('ServerMessage parses term_exit code', () {
+      final m = ServerMessage.fromJson({'seq': 0, 't': 'term_exit', 'sessionId': 's1', 'code': 0});
+      expect(m.t, 'term_exit');
+      expect(m.exitCode, 0);
+    });
+
     test('HostSession.fromJson maps fields with defaults', () {
       final h = HostSession.fromJson({
         'toolId': 'codex',

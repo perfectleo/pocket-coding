@@ -86,6 +86,10 @@ class ServerMessage {
   final String? url;
   final String? message;
   final String? mode;
+  /// Raw terminal bytes (t == 'term'). Transient; not persisted.
+  final String? data;
+  /// Pty exit status (t == 'term_exit').
+  final int? exitCode;
 
   ServerMessage({
     required this.seq,
@@ -99,6 +103,8 @@ class ServerMessage {
     this.url,
     this.message,
     this.mode,
+    this.data,
+    this.exitCode,
   });
 
   factory ServerMessage.fromJson(Map<String, dynamic> j) => ServerMessage(
@@ -115,6 +121,8 @@ class ServerMessage {
         url: j['url'] as String?,
         message: j['message'] as String?,
         mode: j['mode'] as String?,
+        data: j['data'] as String?,
+        exitCode: (j['code'] as num?)?.toInt(),
       );
 }
 
